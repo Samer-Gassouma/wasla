@@ -15,10 +15,9 @@ release
 electron
 
 # Build outputs
+dist-electron/
 dist/
 build/
-.next/
-out/
 
 # Editor directories and files
 .vscode/*
