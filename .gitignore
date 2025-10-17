@@ -11,6 +11,14 @@ node_modules
 dist
 dist-ssr
 *.local
+release
+electron
+
+# Build outputs
+dist/
+build/
+.next/
+out/
 
 # Editor directories and files
 .vscode/*
