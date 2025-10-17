@@ -2035,9 +2035,9 @@ export default function MainPage() {
       {/* Header */}
       <div className="bg-white border-b px-6 py-4 flex justify-between items-center w-full">
         <div className="flex items-center gap-3">
-          <img src="/icons/logo.png" alt="Wasla" className="h-8 w-8 object-contain -translate-y-0.5" />
+          <img src="icons/logo.png" alt="Wasla" className="h-8 w-8 object-contain -translate-y-0.5" />
           <div className="w-1 h-6 bg-blue-500 -skew-x-12 opacity-60 rounded-full"></div>
-          <img src="/icons/ste.png" alt="STE Dhraiff Services Transport" className="h-8 w-8 object-contain rounded-full bg-white p-0.5 translate-y-0.5" />
+          <img src="icons/ste.png" alt="STE Dhraiff Services Transport" className="h-8 w-8 object-contain rounded-full bg-white p-0.5 translate-y-0.5" />
         </div>
         <div className="flex-1 flex justify-center">
             <h1 className="text-2xl font-semibold">Files de station</h1>

@@ -41,11 +41,11 @@ export default function LoginScreen({ onLoggedIn }: Props) {
         <div className="flex flex-col items-center select-none">
           <div className="flex items-center justify-center gap-4">
             {/* Wasla logo */}
-            <img src="/icons/logo.png" alt="Wasla" className="w-20 h-20 object-contain -translate-y-1" />
+            <img src="icons/logo.png" alt="Wasla" className="w-20 h-20 object-contain -translate-y-1" />
             {/* Backslash accent */}
             <div className="w-1 h-10 bg-blue-500 -skew-x-12 opacity-60 rounded-full"></div>
             {/* STE logo (same size) */}
-            <img src="/icons/ste.png" alt="STE Dhraiff Services Transport" className="w-20 h-20 object-contain rounded-full bg-white p-1 translate-y-1" />
+            <img src="icons/ste.png" alt="STE Dhraiff Services Transport" className="w-20 h-20 object-contain rounded-full bg-white p-1 translate-y-1" />
           </div>
           <div className="mt-4 text-center">
             <div className="text-base font-semibold">Wasla</div>
