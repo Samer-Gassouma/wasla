@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, dialog } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
@@ -104,5 +105,38 @@ app.whenReady().then(() => {
       path: process.execPath,
       args: []
     })
+  }
+
+  // Auto-update: GitHub provider already configured by electron-builder
+  try {
+    autoUpdater.autoDownload = true
+    autoUpdater.checkForUpdatesAndNotify()
+
+    autoUpdater.on('update-available', () => {
+      console.log('Update available')
+    })
+    autoUpdater.on('update-not-available', () => {
+      console.log('No update available')
+    })
+    autoUpdater.on('error', (err: unknown) => {
+      console.error('AutoUpdater error:', err)
+    })
+    autoUpdater.on('download-progress', (p: { percent: number }) => {
+      console.log(`Download progress: ${Math.round(p.percent)}%`)
+    })
+    autoUpdater.on('update-downloaded', async () => {
+      const res = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Redémarrer maintenant', 'Plus tard'],
+        defaultId: 0,
+        cancelId: 1,
+        message: 'Une mise à jour a été téléchargée. Redémarrer pour appliquer ?'
+      })
+      if (res.response === 0) {
+        autoUpdater.quitAndInstall()
+      }
+    })
+  } catch (e) {
+    console.error('Failed to init autoUpdater', e)
   }
 })

@@ -23,13 +23,13 @@
     "icon": "public/icons/icon-256x256.png",
     "target": [
       {
-        "target": "msi",
+        "target": "nsis",
         "arch": [
           "x64"
         ]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}.${ext}"
+    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
   },
   "nsis": {
     "oneClick": false,
