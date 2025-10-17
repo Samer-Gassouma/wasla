@@ -1,85 +1,53 @@
-import { app, BrowserWindow, nativeImage, Tray, Menu } from "electron";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-createRequire(import.meta.url);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-process.env.APP_ROOT = path.join(__dirname, "..");
-const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-const MAIN_DIST = path.join(process.env.APP_ROOT, "dist-electron");
-const RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
-process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
-let win;
-let tray = null;
-function createWindow() {
-  win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, "icons", "icon-256x256.png"),
+import { app as t, BrowserWindow as c, nativeImage as m, Tray as f, Menu as u } from "electron";
+import { fileURLToPath as h } from "node:url";
+import o from "node:path";
+const r = o.dirname(h(import.meta.url));
+process.env.APP_ROOT = o.join(r, "..");
+const i = process.env.VITE_DEV_SERVER_URL, T = o.join(process.env.APP_ROOT, "dist-electron"), l = o.join(process.env.APP_ROOT, "dist");
+process.env.VITE_PUBLIC = i ? o.join(process.env.APP_ROOT, "public") : l;
+let e, n = null;
+function a() {
+  e = new c({
+    icon: o.join(process.env.VITE_PUBLIC, "icons", "icon-256x256.png"),
     webPreferences: {
-      preload: path.join(__dirname, "preload.mjs")
+      preload: o.join(r, "preload.mjs")
     }
-  });
-  win.setFullScreen(true);
-  win.on("minimize", (event) => {
-    event.preventDefault();
-    win == null ? void 0 : win.hide();
-  });
-  win.on("close", (event) => {
-    if (process.platform === "win32") {
-      event.preventDefault();
-      win == null ? void 0 : win.hide();
-    }
-  });
-  win.webContents.on("did-finish-load", () => {
-    win == null ? void 0 : win.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-  });
-  if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    win.loadFile(path.join(RENDERER_DIST, "index.html"));
-  }
+  }), e.setFullScreen(!0), e.on("minimize", (s) => {
+    s.preventDefault(), e == null || e.hide();
+  }), e.on("close", (s) => {
+    process.platform === "win32" && (s.preventDefault(), e == null || e.hide());
+  }), e.webContents.on("did-finish-load", () => {
+    e == null || e.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+  }), i ? e.loadURL(i) : e.loadFile(o.join(l, "index.html"));
 }
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-    win = null;
-  }
+t.on("window-all-closed", () => {
+  process.platform !== "darwin" && (t.quit(), e = null);
 });
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+t.on("activate", () => {
+  c.getAllWindows().length === 0 && a();
 });
-app.whenReady().then(() => {
-  createWindow();
-  const iconPath = path.join(process.env.VITE_PUBLIC, "icons", "icon-256x256.png");
-  const trayIcon = nativeImage.createFromPath(iconPath);
-  tray = new Tray(trayIcon);
-  tray.setToolTip("Wasla Choice");
-  const contextMenu = Menu.buildFromTemplate([
+t.whenReady().then(() => {
+  a();
+  const s = o.join(process.env.VITE_PUBLIC, "icons", "icon-256x256.png"), p = m.createFromPath(s);
+  n = new f(p), n.setToolTip("Wasla Choice");
+  const d = u.buildFromTemplate([
     { label: "Afficher", click: () => {
-      win == null ? void 0 : win.show();
-      win == null ? void 0 : win.focus();
+      e == null || e.show(), e == null || e.focus();
     } },
     { label: "Quitter", click: () => {
-      tray == null ? void 0 : tray.destroy();
-      app.quit();
+      n == null || n.destroy(), t.quit();
     } }
   ]);
-  tray.setContextMenu(contextMenu);
-  tray.on("click", () => {
-    win == null ? void 0 : win.show();
-    win == null ? void 0 : win.focus();
+  n.setContextMenu(d), n.on("click", () => {
+    e == null || e.show(), e == null || e.focus();
+  }), process.platform === "win32" && t.setLoginItemSettings({
+    openAtLogin: !0,
+    path: process.execPath,
+    args: []
   });
-  if (process.platform === "win32") {
-    app.setLoginItemSettings({
-      openAtLogin: true,
-      path: process.execPath,
-      args: []
-    });
-  }
 });
 export {
-  MAIN_DIST,
-  RENDERER_DIST,
-  VITE_DEV_SERVER_URL
+  T as MAIN_DIST,
+  l as RENDERER_DIST,
+  i as VITE_DEV_SERVER_URL
 };

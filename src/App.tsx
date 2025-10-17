@@ -10,7 +10,8 @@ function App() {
   const [token, setToken] = useState<string | null>(null)
 
   const handleInitReady = useCallback(() => setStage('login'), [])
-  const handleLoggedIn = useCallback((t: string, staffInfo: { firstName: string; lastName: string }) => {
+  const handleLoggedIn = useCallback((t: string, _staffInfo: { firstName: string; lastName: string }) => {
+    void _staffInfo;
     setToken(t)
     setAuthToken(t)
     setStage('app')

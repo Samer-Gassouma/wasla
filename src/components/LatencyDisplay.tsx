@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Wifi, WifiOff, Clock } from 'lucide-react';
@@ -24,12 +24,13 @@ export default function LatencyDisplay({ connected, latency, compact = false }: 
     }
   }, [latency]);
 
-  const getLatencyColor = (latency: number) => {
-    if (latency < 50) return 'text-green-600';
-    if (latency < 100) return 'text-yellow-600';
-    if (latency < 200) return 'text-orange-600';
-    return 'text-red-600';
-  };
+  // kept for future styling needs
+  // const getLatencyColor = (latency: number) => {
+  //   if (latency < 50) return 'text-green-600';
+  //   if (latency < 100) return 'text-yellow-600';
+  //   if (latency < 200) return 'text-orange-600';
+  //   return 'text-red-600';
+  // };
 
   const getLatencyBadgeVariant = (latency: number) => {
     if (latency < 50) return 'default';
