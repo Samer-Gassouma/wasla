@@ -1,6 +1,6 @@
 export const API = {
-  auth: "http://localhost:8001",
-  queue: "http://localhost:8002",
-  booking: "http://localhost:8003",
-  ws: "ws://localhost:8004",
+  auth: "http://192.168.192.100:8001",
+  queue: "http://192.168.192.100:8002",
+  booking: "http://192.168.192.100:8003",
+  ws: "ws://192.168.192.100:8004",
 };

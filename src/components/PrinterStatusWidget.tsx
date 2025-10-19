@@ -50,7 +50,6 @@ export default function PrinterStatusWidget({ printerId = 'printer1', compact = 
         licensePlate: 'TEST-123',
         destinationName: 'Test Destination',
         seatNumber: 1,
-        verificationCode: 'TEST-CODE',
         totalAmount: 10.0,
         createdBy: 'Test User',
         createdAt: new Date().toISOString(),

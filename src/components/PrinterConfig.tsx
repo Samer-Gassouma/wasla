@@ -102,7 +102,6 @@ export default function PrinterConfigComponent({ onConfigUpdate }: PrinterConfig
         licensePlate: 'TEST-123',
         destinationName: 'Test Destination',
         seatNumber: 1,
-        verificationCode: 'TEST-CODE',
         totalAmount: 10.0,
         createdBy: 'Test User',
         createdAt: new Date().toISOString(),

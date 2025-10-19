@@ -65,26 +65,35 @@ export interface TicketData {
   licensePlate: string;
   destinationName: string;
   seatNumber: number;
-  verificationCode: string;
   totalAmount: number;
   createdBy: string;
   createdAt: string;
   stationName: string;
   routeName: string;
-  previousVehicles?: string[]; // For exit pass tickets
+  // Vehicle and pricing information
+  vehicleCapacity?: number;  // Vehicle capacity for total amount calculation
+  basePrice?: number;        // Base price per seat from route
+  // Exit pass count for today
+  exitPassCount?: number;    // Current count of exit passes for today
   // Branding (optional)
   brandName?: string;
   brandLogo?: string; // path or URL to logo image (e.g., /icons/ste_260.png)
+  // Company branding (mapped to backend fields)
+  companyName?: string;
+  companyLogo?: string;
+  // Staff information
+  staffFirstName?: string;
+  staffLastName?: string;
 }
 
 // Printer service class
 export class PrinterService {
   private baseUrl: string;
   private defaultPrinterId: string = 'printer1';
-  private defaultBrandName: string = 'Dhraiff Services Transport';
+  private defaultBrandName: string = 'STE';
   private defaultBrandLogoPath: string = '/icons/ste_260.png';
 
-  constructor(baseUrl: string = 'http://localhost:8005') {
+  constructor(baseUrl: string = 'http://192.168.192.100:8005') {
     this.baseUrl = baseUrl;
   }
 
@@ -166,6 +175,9 @@ export class PrinterService {
       // Ensure brand fields are present with fallbacks
       brandName: data.brandName || this.defaultBrandName,
       brandLogo: data.brandLogo || this.defaultBrandLogoPath,
+      // Map to backend fields
+      companyName: data.companyName || data.brandName || this.defaultBrandName,
+      companyLogo: data.companyLogo || data.brandLogo || this.defaultBrandLogoPath,
     };
   }
 
@@ -254,35 +266,38 @@ export class PrinterService {
   }
 
   // Helper method to create ticket data from booking
-  createTicketDataFromBooking(booking: any, vehicle: any, destination: any, staffName: string): TicketData {
+  createTicketDataFromBooking(booking: any, vehicle: any, destination: any, staffName: string, staffFirstName?: string, staffLastName?: string): TicketData {
     return {
       licensePlate: vehicle?.licensePlate || 'Unknown',
       destinationName: destination?.name || 'Unknown Destination',
       seatNumber: booking?.seatNumber || 1,
-      verificationCode: booking?.verificationCode || 'N/A',
       totalAmount: booking?.totalAmount || 0,
       createdBy: staffName,
-      createdAt: new Date().toISOString(),
+      createdAt: booking?.createdAt || new Date().toISOString(),
       stationName: 'Station Name', // You might want to get this from context
       routeName: destination?.name || 'Unknown Route',
+      // Staff information
+      staffFirstName: staffFirstName || '',
+      staffLastName: staffLastName || '',
     };
   }
 
   // Helper method to print ticket after booking
-  async printTicketAfterBooking(booking: any, vehicle: any, destination: any, staffName: string, printerId: string = this.defaultPrinterId): Promise<void> {
-    const ticketData = this.createTicketDataFromBooking(booking, vehicle, destination, staffName);
+  async printTicketAfterBooking(booking: any, vehicle: any, destination: any, staffName: string, printerId: string = this.defaultPrinterId, staffFirstName?: string, staffLastName?: string): Promise<void> {
+    const ticketData = this.createTicketDataFromBooking(booking, vehicle, destination, staffName, staffFirstName, staffLastName);
     await this.printBookingTicket(printerId, ticketData);
     // Follow with a talon containing plate, seat index, timestamp
     const talonData: TicketData = {
       licensePlate: ticketData.licensePlate,
       destinationName: ticketData.destinationName,
       seatNumber: ticketData.seatNumber,
-      verificationCode: '',
-      totalAmount: 0,
+      totalAmount: ticketData.totalAmount,
       createdBy: ticketData.createdBy,
-      createdAt: new Date().toISOString(),
-      stationName: '',
-      routeName: '',
+      createdAt: booking?.createdAt || new Date().toISOString(),
+      stationName: ticketData.stationName,
+      routeName: ticketData.routeName,
+      staffFirstName: staffFirstName || '',
+      staffLastName: staffLastName || '',
     };
     await this.printTalon(printerId, talonData);
   }

@@ -21,6 +21,7 @@
   },
   "win": {
     "icon": "public/icons/icon-256x256.png",
+    "publisherName": ["STE Dhraiff Services Transport"],
     "target": [
       {
         "target": "nsis",

@@ -162,7 +162,6 @@ export async function createBookingByQueueEntry(payload: { queueEntryId: string;
       totalAmount: number; 
       bookingStatus: string; 
       paymentStatus: string; 
-      verificationCode: string; 
       createdBy: string; 
       createdByName: string; 
       createdAt: string 

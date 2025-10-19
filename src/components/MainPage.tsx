@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips } from "@/api/client";
 import { connectQueue } from "@/ws/client";
 import { printerService, TicketData } from "@/services/printerService";
+import { getTodayTripsCount } from "@/services/bookingService";
 import PrinterStatusDisplay from "@/components/PrinterStatusDisplay";
 import LatencyDisplay from "@/components/LatencyDisplay";
 import {
@@ -278,7 +279,7 @@ function TransferSeatsModal({
           {/* Search Input */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rechercher un véhicule destinataire&nbsp;:
+              Rechercher un Vehicule destinataire&nbsp;:
             </label>
             <input
               type="text"
@@ -291,11 +292,11 @@ function TransferSeatsModal({
 
           {/* Vehicle List */}
           <div className="mb-4">
-            <div className="text-sm font-medium text-gray-700 mb-2">Véhicules disponibles&nbsp;:</div>
+            <div className="text-sm font-medium text-gray-700 mb-2">Vehicules disponibles&nbsp;:</div>
             <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
               {filteredQueue.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
-                  {searchQuery ? 'Aucun véhicule ne correspond à votre recherche.' : 'Aucun autre véhicule dans la file.'}
+                  {searchQuery ? 'Aucun Vehicule ne correspond à votre recherche.' : 'Aucun autre Vehicule dans la file.'}
                 </div>
               ) : (
                 filteredQueue.map((entry) => (
@@ -371,7 +372,7 @@ function ChangeDestinationModal({
 
           {/* Source Vehicle Info */}
           <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-            <div className="text-sm text-gray-600 mb-1">Véhicule à déplacer&nbsp;:</div>
+            <div className="text-sm text-gray-600 mb-1">Vehicule à déplacer&nbsp;:</div>
             <div className="font-semibold">{fromEntry.licensePlate}</div>
             <div className="text-sm text-gray-500">Position actuelle&nbsp;: {fromEntry.queuePosition}</div>
           </div>
@@ -386,7 +387,7 @@ function ChangeDestinationModal({
                 </div>
               ) : authorizedStations.length === 0 ? (
                 <div className="p-4 text-center text-gray-500">
-                  Aucune station autorisée pour ce véhicule.
+                  Aucune station autorisée pour ce Vehicule.
                 </div>
               ) : (
                 authorizedStations.map((station) => (
@@ -461,14 +462,31 @@ function AddVehicleModal({
   searchError: string | null;
   currentRoute: Summary | null;
 }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      // Small delay to ensure modal is fully rendered
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Ajouter un véhicule à la file</h2>
+            <h2 className="text-xl font-semibold">Ajouter un Vehicule à la file</h2>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 text-2xl"
@@ -480,15 +498,17 @@ function AddVehicleModal({
           {/* Search Input */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rechercher des véhicules par immatriculation&nbsp;:
+              Rechercher des Vehicules par immatriculation&nbsp;:
             </label>
             <input
+              ref={inputRef}
               type="text"
               placeholder="Saisissez l'immatriculation..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               autoFocus
+              disabled={loadingSearch}
             />
             
               {/* Erreur de recherche */}
@@ -508,12 +528,12 @@ function AddVehicleModal({
               <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-md">
                 {loadingSearch ? (
                   <div className="p-4 text-center text-gray-500">
-                    Recherche de véhicules…
+                    Recherche de Vehicules…
                   </div>
                 ) : searchResults.length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
                     <div className="mb-2">🔍</div>
-                    <div>Aucun véhicule ne correspond à "{searchQuery}"</div>
+                    <div>Aucun Vehicule ne correspond à "{searchQuery}"</div>
                     <div className="text-xs mt-1">Essayez une autre immatriculation ou vérifiez l'orthographe</div>
                   </div>
                 ) : (
@@ -589,7 +609,7 @@ function AddVehicleModal({
           {/* Selected Vehicle Info */}
           {selectedVehicle && (
             <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <div className="text-sm text-gray-600 mb-1">Véhicule sélectionné&nbsp;:</div>
+              <div className="text-sm text-gray-600 mb-1">Vehicule sélectionné&nbsp;:</div>
               <div className="font-semibold">{selectedVehicle.licensePlate}</div>
               <div className="text-sm text-gray-500">Capacité&nbsp;: {selectedVehicle.capacity} sièges</div>
             </div>
@@ -606,7 +626,7 @@ function AddVehicleModal({
                   </div>
                 ) : authorizedStations.length === 0 ? (
                   <div className="p-4 text-center text-gray-500">
-                    Aucune station autorisée pour ce véhicule.
+                    Aucune station autorisée pour ce Vehicule.
                   </div>
                 ) : (
                   authorizedStations.map((station) => (
@@ -854,11 +874,80 @@ export default function MainPage() {
     bookings?: Array<{
       id: string;
       licensePlate: string;
-      verificationCode: string;
       totalAmount: number;
       createdBy: string;
     }>;
   }>>([]);
+
+  // Centralized refresh function for queue and destination lists
+  const refreshQueueAndSummaries = async (destinationId?: string) => {
+    setLoading(true);
+    try {
+      // Refresh queue data for the specified destination or current selected destination
+      const targetDestinationId = destinationId || selected?.destinationId;
+      if (targetDestinationId) {
+        const response = await listQueue(targetDestinationId);
+        const items = (response.data as any[]).map((e) => ({
+          ...e,
+          availableSeats: Number(e.availableSeats ?? 0),
+          totalSeats: Number(e.totalSeats ?? 0),
+          queuePosition: Number(e.queuePosition ?? 0),
+          bookedSeats: Number(e.bookedSeats ?? 0),
+          hasDayPass: e.hasDayPass ?? false,
+          dayPassStatus: e.dayPassStatus ?? 'no_pass',
+          dayPassPurchasedAt: e.dayPassPurchasedAt,
+          hasTripsToday: e.hasTripsToday ?? false,
+          status: e.status,
+        })) as QueueEntry[];
+        
+        // Check if any vehicle is now fully booked (availableSeats === 0) and remove them
+        const fullyBookedVehicles = items.filter(item => item.availableSeats === 0);
+        
+        if (fullyBookedVehicles.length > 0) {
+          console.log('Found fully booked vehicles to remove:', fullyBookedVehicles.map(v => v.licensePlate));
+          
+          for (const vehicle of fullyBookedVehicles) {
+            try {
+              await deleteQueueEntry(targetDestinationId, vehicle.id);
+              console.log('Fully booked vehicle removed from queue successfully:', vehicle.licensePlate);
+              
+              // Add notification for vehicle removal
+              addNotification({
+                type: 'success',
+                title: 'Vehicule(s) retiré(s) de la file',
+                message: `Le Vehicule ${vehicle.licensePlate} a été retiré de la file car il est maintenant complet.`,
+              });
+            } catch (removeError) {
+              console.error('Failed to remove fully booked vehicle from queue:', removeError);
+            }
+          }
+          
+          // Remove all fully booked vehicles from the local queue state
+          const filteredItems = items.filter(item => item.availableSeats > 0);
+          
+          // Only update queue if this is the currently selected destination
+          if (!destinationId || (selected && selected.destinationId === targetDestinationId)) {
+            setQueue(filteredItems);
+          }
+        } else {
+          // Only update queue if this is the currently selected destination
+          if (!destinationId || (selected && selected.destinationId === targetDestinationId)) {
+            setQueue(items);
+          }
+        }
+      }
+      
+      // Always refresh queue summaries to update seat counts across all destinations
+      const summariesResponse = await listQueueSummaries();
+      setSummaries(summariesResponse.data || []);
+      
+      console.log('Queue and summaries refreshed successfully');
+    } catch (refreshError) {
+      console.error('Failed to refresh queue and summaries:', refreshError);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // WebSocket connection status
   const [wsConnected, setWsConnected] = useState(false);
@@ -1070,6 +1159,9 @@ export default function MainPage() {
       setReorderSuccess(true);
       // Clear success indicator after 2 seconds
       setTimeout(() => setReorderSuccess(false), 2000);
+      
+      // Automatically refresh queue and summaries after reordering
+      await refreshQueueAndSummaries();
     } catch (error) {
       console.error('Failed to reorder queue:', error);
       // Revert the UI change on error
@@ -1100,13 +1192,13 @@ export default function MainPage() {
           return;
         }
       } else {
-  const confirmMessage = `Ce véhicule a ${bookedSeats} sièges réservés.\n\nIl n'y a pas de véhicule suivant dans la file pour transférer les sièges.\n\nÊtes-vous sûr de vouloir retirer ce véhicule de la file ?`;
+  const confirmMessage = `Ce Vehicule a ${bookedSeats} sièges réservés.\n\nIl n'y a pas de Vehicule suivant dans la file pour transférer les sièges.\n\nÊtes-vous sûr de vouloir retirer ce Vehicule de la file ?`;
         if (!confirm(confirmMessage)) {
           return;
         }
       }
     } else {
-      if (!confirm('Êtes-vous sûr de vouloir retirer ce véhicule de la file ?')) {
+      if (!confirm('Êtes-vous sûr de vouloir retirer ce Vehicule de la file ?')) {
         return;
       }
     }
@@ -1114,36 +1206,13 @@ export default function MainPage() {
     try {
       await deleteQueueEntry(selected.destinationId, entryId);
       
-      // Refresh queue and summaries to get updated data
-      setLoading(true);
-      try {
-        // Refresh queue data
-        const response = await listQueue(selected.destinationId);
-        const items = (response.data as any[]).map((e) => ({
-          ...e,
-          availableSeats: Number(e.availableSeats ?? 0),
-          totalSeats: Number(e.totalSeats ?? 0),
-          queuePosition: Number(e.queuePosition ?? 0),
-          bookedSeats: Number(e.bookedSeats ?? 0),
-          status: e.status,
-        })) as QueueEntry[];
-        setQueue(items);
-        
-        // Refresh queue summaries to update seat counts
-        const summariesResponse = await listQueueSummaries();
-        setSummaries(summariesResponse.data || []);
-      } catch (refreshError) {
-        console.error('Failed to refresh queue:', refreshError);
-        // Fallback: just remove the vehicle from local state
-        setQueue(queue.filter(item => item.id !== entryId));
-      } finally {
-        setLoading(false);
-      }
+      // Automatically refresh queue and summaries
+      await refreshQueueAndSummaries();
       
       console.log('Successfully removed from queue:', entryId);
     } catch (error) {
-      console.error('Échec du retrait de la file :', error);
-      alert('Échec du retrait du véhicule de la file. Veuillez réessayer.');
+      console.error('Échec du retrait de la file :', error);
+      alert('Échec du retrait du Vehicule de la file. Veuillez réessayer.');
     }
   };
 
@@ -1175,43 +1244,8 @@ export default function MainPage() {
       
       await transferSeats(selected.destinationId, transferFromEntry.id, toEntry.id, transferSeatsCount);
       
-      // Refresh queue and summaries to get updated data
-      setLoading(true);
-      try {
-        // Refresh queue data
-        const response = await listQueue(selected.destinationId);
-        const items = (response.data as any[]).map((e) => ({
-          ...e,
-          availableSeats: Number(e.availableSeats ?? 0),
-          totalSeats: Number(e.totalSeats ?? 0),
-          queuePosition: Number(e.queuePosition ?? 0),
-          bookedSeats: Number(e.bookedSeats ?? 0),
-          hasDayPass: e.hasDayPass ?? false,
-          dayPassStatus: e.dayPassStatus ?? 'no_pass',
-          dayPassPurchasedAt: e.dayPassPurchasedAt,
-          hasTripsToday: e.hasTripsToday ?? false,
-        })) as QueueEntry[];
-        setQueue(items);
-        
-        // Refresh queue summaries to update seat counts
-        const summariesResponse = await listQueueSummaries();
-        setSummaries(summariesResponse.data || []);
-      } catch (refreshError) {
-        console.error('Failed to refresh queue:', refreshError);
-        // Fallback: update local state manually
-        const updatedQueue = queue.map(entry => {
-          if (entry.id === transferFromEntry.id) {
-            return { ...entry, availableSeats: entry.availableSeats - transferSeatsCount };
-          }
-          if (entry.id === toEntry.id) {
-            return { ...entry, availableSeats: entry.availableSeats + transferSeatsCount };
-          }
-          return entry;
-        });
-        setQueue(updatedQueue);
-      } finally {
-        setLoading(false);
-      }
+      // Automatically refresh queue and summaries
+      await refreshQueueAndSummaries();
       
       // Close modal
       setTransferModalOpen(false);
@@ -1257,7 +1291,7 @@ export default function MainPage() {
         addNotification({
           type: 'error',
           title: 'No Day Pass Found',
-      message: "Ce véhicule n'a pas de pass journalier valide à réimprimer."
+      message: "Ce Vehicule n'a pas de pass journalier valide à réimprimer."
         });
         return;
       }
@@ -1269,10 +1303,9 @@ export default function MainPage() {
         licensePlate: dayPassData.licensePlate,
         destinationName: dayPassData.destinationName,
         seatNumber: 1, // Day pass doesn't have specific seat
-        verificationCode: dayPassData.dayPassId.substring(0, 8).toUpperCase(),
         totalAmount: dayPassData.price,
-        createdBy: dayPassData.createdBy,
-        createdAt: dayPassData.purchaseDate,
+        createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
+        createdAt: new Date().toISOString(), // Use current time for reprint
         stationName: "Station", // Default station name
         routeName: dayPassData.destinationName,
       };
@@ -1312,13 +1345,11 @@ export default function MainPage() {
         licensePlate: entry.licensePlate,
         destinationName: selected.destinationName,
         seatNumber: 0, // Not applicable for exit pass
-        verificationCode: '', // Not applicable for exit pass
         totalAmount: selected.basePrice * entry.totalSeats, // Total price for all seats
         createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff',
         createdAt: new Date().toISOString(),
         stationName: 'Station',
         routeName: selected.destinationName,
-        previousVehicles: [], // Empty array for manual printing
       };
       
       // Print the exit pass ticket
@@ -1340,7 +1371,7 @@ export default function MainPage() {
     }
   };
 
-  const handlePrintExitPassForTrip = async (trip: any) => {
+  const handlePrintExitPassForTrip = async (trip: any, tripIndex: number) => {
     try {
       console.log('Printing exit pass for trip:', trip);
       
@@ -1349,13 +1380,16 @@ export default function MainPage() {
         licensePlate: trip.licensePlate,
         destinationName: trip.destinationName,
         seatNumber: 0, // Not applicable for exit pass
-        verificationCode: '', // Not applicable for exit pass
-        totalAmount: trip.seatsBooked ? trip.seatsBooked * 15 : 0, // Estimate price if seats info available
+        totalAmount: trip.vehicleCapacity && trip.basePrice ? trip.vehicleCapacity * trip.basePrice : 0,
         createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff',
-        createdAt: trip.startTime || new Date().toISOString(),
+        createdAt: trip.startTime ? new Date(trip.startTime).toISOString() : new Date().toISOString(),
         stationName: 'Station',
         routeName: trip.destinationName,
-        previousVehicles: [], // Empty array for manual printing
+        // Vehicle and pricing information
+        vehicleCapacity: trip.vehicleCapacity,
+        basePrice: trip.basePrice,
+        // Exit pass count for today (use trip index + 1 for display)
+        exitPassCount: tripIndex + 1,
       };
       
       // Print the exit pass ticket
@@ -1383,34 +1417,8 @@ export default function MainPage() {
     try {
       await changeDestination(selected.destinationId, changeDestFromEntry.id, station.stationId, station.stationName);
       
-      // Refresh the current queue and summaries to get updated data
-      setLoading(true);
-      try {
-        // Refresh queue data
-        const response = await listQueue(selected.destinationId);
-        const items = (response.data as any[]).map((e) => ({
-          ...e,
-          availableSeats: Number(e.availableSeats ?? 0),
-          totalSeats: Number(e.totalSeats ?? 0),
-          queuePosition: Number(e.queuePosition ?? 0),
-          bookedSeats: Number(e.bookedSeats ?? 0),
-          hasDayPass: e.hasDayPass ?? false,
-          dayPassStatus: e.dayPassStatus ?? 'no_pass',
-          dayPassPurchasedAt: e.dayPassPurchasedAt,
-          hasTripsToday: e.hasTripsToday ?? false,
-        })) as QueueEntry[];
-        setQueue(items);
-        
-        // Refresh queue summaries to update seat counts
-        const summariesResponse = await listQueueSummaries();
-        setSummaries(summariesResponse.data || []);
-      } catch (refreshError) {
-        console.error('Failed to refresh queue:', refreshError);
-        // Fallback: just remove the moved vehicle from local state
-        setQueue(queue.filter(item => item.id !== changeDestFromEntry.id));
-      } finally {
-        setLoading(false);
-      }
+      // Automatically refresh queue and summaries
+      await refreshQueueAndSummaries();
       
       // Close modal
       setChangeDestModalOpen(false);
@@ -1445,12 +1453,12 @@ export default function MainPage() {
         }
       } else {
         setSearchResults([]);
-        setSearchError('Aucun véhicule trouvé correspondant à votre recherche.');
+        setSearchError('Aucun Vehicule trouvé correspondant à votre recherche.');
       }
     } catch (error) {
-      console.error('Échec de la recherche de véhicules :', error);
+      console.error('Échec de la recherche de Vehicules :', error);
       setSearchResults([]);
-      setSearchError('Échec de la recherche de véhicules. Veuillez réessayer.');
+      setSearchError('Échec de la recherche de Vehicules. Veuillez réessayer.');
     } finally {
       setLoadingSearch(false);
     }
@@ -1463,7 +1471,7 @@ export default function MainPage() {
 
   const handleSelectVehicle = async (vehicle: any) => {
     if (!vehicle || !vehicle.id) {
-      console.error('Véhicule sélectionné non valide');
+      console.error('Vehicule sélectionné non valide');
       return;
     }
     
@@ -1477,7 +1485,7 @@ export default function MainPage() {
         setVehicleAuthorizedStations(response.data);
       } else {
         setVehicleAuthorizedStations([]);
-        console.warn('Aucune station autorisée trouvée pour le véhicule :', vehicle.licensePlate);
+        console.warn('Aucune station autorisée trouvée pour le Vehicule :', vehicle.licensePlate);
       }
     } catch (error) {
       console.error('Échec du chargement des stations autorisées :', error);
@@ -1501,9 +1509,8 @@ export default function MainPage() {
           licensePlate: dayPassData.licensePlate,
           destinationName: dayPassData.destinationName,
           seatNumber: 1, // Day pass doesn't have specific seat
-          verificationCode: dayPassData.dayPassId.substring(0, 8).toUpperCase(),
           totalAmount: dayPassData.price,
-          createdBy: dayPassData.createdBy,
+          createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
           createdAt: dayPassData.purchaseDate,
           stationName: "Station", // Default station name
           routeName: dayPassData.destinationName,
@@ -1530,48 +1537,20 @@ export default function MainPage() {
         const dayPassData = response.data.dayPassValid;
         addNotification({
           type: 'success',
-          title: 'Véhicule ajouté à la file',
+          title: 'Vehicule ajouté à la file',
           message: `${dayPassData.licensePlate} ajouté à la file (possède déjà un pass valide)`
         });
       } else {
         // No day pass involved
         addNotification({
           type: 'success',
-          title: 'Véhicule ajouté à la file',
+          title: 'Vehicule ajouté à la file',
           message: `${selectedVehicle.licensePlate} ajouté à la file de ${station.stationName}`
         });
       }
       
-      // Refresh queue and summaries to get updated data
-      setLoading(true);
-      try {
-        // Refresh queue data for the selected destination
-        const queueResponse = await listQueue(station.stationId);
-        const items = (queueResponse.data as any[]).map((e) => ({
-          ...e,
-          availableSeats: Number(e.availableSeats ?? 0),
-          totalSeats: Number(e.totalSeats ?? 0),
-          queuePosition: Number(e.queuePosition ?? 0),
-          bookedSeats: Number(e.bookedSeats ?? 0),
-          hasDayPass: e.hasDayPass ?? false,
-          dayPassStatus: e.dayPassStatus ?? 'no_pass',
-          dayPassPurchasedAt: e.dayPassPurchasedAt,
-          hasTripsToday: e.hasTripsToday ?? false,
-        })) as QueueEntry[];
-        
-        // If this is the currently selected destination, update the queue
-        if (selected && selected.destinationId === station.stationId) {
-          setQueue(items);
-        }
-        
-        // Refresh queue summaries to update seat counts
-        const summariesResponse = await listQueueSummaries();
-        setSummaries(summariesResponse.data || []);
-      } catch (refreshError) {
-        console.error('Failed to refresh queue:', refreshError);
-      } finally {
-        setLoading(false);
-      }
+      // Automatically refresh queue and summaries for the destination where vehicle was added
+      await refreshQueueAndSummaries(station.stationId);
       
       // Close modal and reset state
       setAddVehicleModalOpen(false);
@@ -1582,8 +1561,8 @@ export default function MainPage() {
       
       console.log(`Successfully added ${selectedVehicle.licensePlate} to ${station.stationName} queue`);
     } catch (error) {
-      console.error('Échec de l\'ajout du véhicule à la file :', error);
-      alert('Échec de l\'ajout du véhicule à la file. Veuillez réessayer.');
+      console.error('Échec de l\'ajout du Vehicule à la file :', error);
+      alert('Échec de l\'ajout du Vehicule à la file. Veuillez réessayer.');
     }
   };
 
@@ -1620,10 +1599,9 @@ export default function MainPage() {
                 licensePlate: booking.licensePlate || selectedVehicleForBooking.licensePlate,
                 destinationName: selected.destinationName,
                 seatNumber: booking.seatNumber || 1, // Use actual seat number from backend
-                verificationCode: booking.verificationCode,
                 totalAmount: booking.totalAmount,
                 createdBy: booking.createdByName || booking.createdBy || staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff', // Use staff name from backend
-                createdAt: new Date().toISOString(),
+                createdAt: booking.createdAt,
                 stationName: 'Station', // You might want to get this from context
                 routeName: selected.destinationName,
               };
@@ -1634,10 +1612,9 @@ export default function MainPage() {
                 licensePlate: ticketData.licensePlate,
                 destinationName: ticketData.destinationName,
                 seatNumber: ticketData.seatNumber,
-                verificationCode: '',
-                totalAmount: 0,
+                totalAmount: booking.totalAmount,
                 createdBy: ticketData.createdBy,
-                createdAt: new Date().toISOString(),
+                createdAt: booking.createdAt,
                 stationName: '',
                 routeName: '',
               };
@@ -1650,43 +1627,42 @@ export default function MainPage() {
         }
         
         // Print exit pass if vehicle is fully booked
-        console.log('Checking exit pass:', { hasExitPass, exitPass: !!exitPass });
         if (hasExitPass && exitPass) {
-          console.log('Printing exit pass for vehicle:', exitPass.licensePlate);
+          console.log('Vehicle is fully booked, printing exit pass for:', exitPass.licensePlate);
+          
           try {
-            // Convert previousVehicles array to string array for printing
-            const previousVehiclesList = exitPass.previousVehicles?.map((pv: any) => pv.licensePlate) || [];
-            console.log('Previous vehicles for exit pass:', previousVehiclesList);
+            // Get current trip count for today (this will be the index for the new trip)
+            const tripCountResponse = await getTodayTripsCount();
+            const currentTripCount = tripCountResponse.data.count;
             
             const exitPassTicketData: TicketData = {
               licensePlate: exitPass.licensePlate,
               destinationName: exitPass.destinationName,
               seatNumber: 0, // Not applicable for exit pass
-              verificationCode: '', // Not applicable for exit pass
               totalAmount: exitPass.totalPrice,
               createdBy: exitPass.createdByName || exitPass.createdBy || 'Staff',
               createdAt: exitPass.createdAt,
               stationName: 'Station',
               routeName: exitPass.destinationName,
-              previousVehicles: previousVehiclesList,
+              // Vehicle and pricing information
+              vehicleCapacity: exitPass.vehicleCapacity,
+              basePrice: exitPass.basePrice,
+              // Exit pass count for today (use current count + 1 as the new trip index)
+              exitPassCount: currentTripCount + 1,
             };
             
-            console.log('Sending exit pass to printer:', exitPassTicketData);
+            console.log('Printing exit pass:', exitPassTicketData);
             await printerService.printExitPassTicket('printer1', exitPassTicketData);
             console.log('Exit pass printed successfully');
             
-            // Remove vehicle from queue after exit pass is printed
+            // Remove vehicle from queue after successful exit pass printing
             try {
               console.log('Removing vehicle from queue:', exitPass.queueId, 'destination:', exitPass.destinationId);
               await deleteQueueEntry(exitPass.destinationId, exitPass.queueId);
               console.log('Vehicle removed from queue successfully');
               
               // Refresh queue data to reflect the removal
-              if (selected) {
-                console.log('Refreshing queue data after vehicle removal');
-                const updatedQueue = await listQueue(selected.destinationId);
-                setQueue(updatedQueue.data || []);
-              }
+              await refreshQueueAndSummaries();
             } catch (removeError) {
               console.error('Failed to remove vehicle from queue:', removeError);
               // Don't fail the booking if removal fails, just log the error
@@ -1696,18 +1672,23 @@ export default function MainPage() {
             // Don't fail the booking if printing fails, just log the error
           }
         } else {
-          console.log('No exit pass to print - hasExitPass:', hasExitPass, 'exitPass exists:', !!exitPass);
+          console.log('No exit pass needed - vehicle not fully booked');
+        }
+        
+        // Update notification message to include vehicle removal info
+        let notificationMessage = `Vehicule : ${vehicleLP} - ${bookedSeatsCount} ticket${bookedSeatsCount === 1 ? '' : 's'} imprimé`;
+        if (hasExitPass) {
+          notificationMessage += ' + Laissez-passer imprimé + Vehicule retiré de la file';
         }
         
         addNotification({
           type: 'success',
           title: `Réservation réussie de ${bookedSeatsCount} siège${bookedSeatsCount === 1 ? '' : 's'}`,
-          message: `Véhicule : ${vehicleLP} - ${bookedSeatsCount} ticket${bookedSeatsCount === 1 ? '' : 's'} imprimé${hasExitPass ? ' + Laissez-passer imprimé + Véhicule retiré de la file' : ''}`,
+          message: notificationMessage,
           bookings: bookings.length > 0
             ? bookings.map((b: any) => ({
                 id: b.id,
                 licensePlate: b.licensePlate,
-                verificationCode: b.verificationCode,
                 totalAmount: b.totalAmount,
                 createdBy: b.createdBy
               }))
@@ -1728,10 +1709,9 @@ export default function MainPage() {
               licensePlate: b.licensePlate || 'Attribué automatiquement',
               destinationName: selected.destinationName,
               seatNumber: 1,
-              verificationCode: b.verificationCode || 'N/D',
               totalAmount: b.totalAmount || 0,
-              createdBy: b.createdBy || staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
-              createdAt: new Date().toISOString(),
+              createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
+              createdAt: b.createdAt || new Date().toISOString(),
               stationName: 'Station',
               routeName: selected.destinationName,
             };
@@ -1741,10 +1721,9 @@ export default function MainPage() {
               licensePlate: ticketData.licensePlate,
               destinationName: ticketData.destinationName,
               seatNumber: ticketData.seatNumber,
-              verificationCode: '',
-              totalAmount: 0,
+              totalAmount: b.totalAmount || 0,
               createdBy: ticketData.createdBy,
-              createdAt: new Date().toISOString(),
+              createdAt: b.createdAt || new Date().toISOString(),
               stationName: '',
               routeName: '',
             };
@@ -1757,36 +1736,12 @@ export default function MainPage() {
         addNotification({
           type: 'success',
           title: `Réservation réussie de ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}`,
-          message: `Véhicule : ${b?.licensePlate || 'Attribué automatiquement'}`,
+          message: `Vehicule : ${b?.licensePlate || 'Attribué automatiquement'}`,
         });
       }
       
-      // Refresh queue and summaries to get updated data
-      setLoading(true);
-      try {
-        // Refresh queue data
-        const response = await listQueue(selected.destinationId);
-        const items = (response.data as any[]).map((e) => ({
-          ...e,
-          availableSeats: Number(e.availableSeats ?? 0),
-          totalSeats: Number(e.totalSeats ?? 0),
-          queuePosition: Number(e.queuePosition ?? 0),
-          bookedSeats: Number(e.bookedSeats ?? 0),
-          hasDayPass: e.hasDayPass ?? false,
-          dayPassStatus: e.dayPassStatus ?? 'no_pass',
-          dayPassPurchasedAt: e.dayPassPurchasedAt,
-          hasTripsToday: e.hasTripsToday ?? false,
-        })) as QueueEntry[];
-        setQueue(items);
-        
-        // Refresh queue summaries to update seat counts
-        const summariesResponse = await listQueueSummaries();
-        setSummaries(summariesResponse.data || []);
-      } catch (refreshError) {
-        console.error('Failed to refresh queue:', refreshError);
-      } finally {
-        setLoading(false);
-      }
+      // Automatically refresh queue and summaries after booking completion
+      await refreshQueueAndSummaries();
       
       // Clear selected seats; keep the vehicle selection if any
       setSelectedSeats([]);
@@ -1979,9 +1934,8 @@ export default function MainPage() {
                 licensePlate: dayPassData.licensePlate,
                 destinationName: dayPassData.destinationName,
                 seatNumber: 1, // Day pass doesn't have specific seat
-                verificationCode: dayPassData.dayPassId.substring(0, 8).toUpperCase(),
                 totalAmount: dayPassData.price,
-                createdBy: dayPassData.createdBy,
+                createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
                 createdAt: dayPassData.purchaseDate,
                 stationName: "Station", // Default station name
                 routeName: dayPassData.destinationName,
@@ -2049,7 +2003,7 @@ export default function MainPage() {
             onClick={() => setAddVehicleModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            + Ajouter un véhicule
+            + Ajouter un Vehicule
           </Button>
           {staffInfo && (
             <>
@@ -2100,8 +2054,15 @@ export default function MainPage() {
               setLoadingTrips(true);
               try {
                 setTripsError(null);
+                console.log('Loading today\'s trips...');
                 const r = await listTodayTrips();
+                console.log('Trips API response:', r);
                 setTrips(Array.isArray(r.data) ? r.data : []);
+                console.log('Trips loaded:', Array.isArray(r.data) ? r.data.length : 0, 'trips');
+              } catch (error) {
+                console.error('Failed to load trips:', error);
+                setTripsError('Échec du chargement des trajets. Veuillez réessayer.');
+                setTrips([]);
               } finally {
                 setLoadingTrips(false);
               }
@@ -2115,18 +2076,18 @@ export default function MainPage() {
         {selected && (
           <div className="py-6 w-full">
             <h2 className="text-xl font-semibold mb-4 px-6">
-              File {selected.destinationName} ({queue.length} véhicules)
+              File {selected.destinationName} ({queue.length} Vehicules)
             </h2>
             <div className="px-6">
               {loading ? (
-                <div className="text-center py-8 text-gray-500">Chargement des véhicules…</div>
+                <div className="text-center py-8 text-gray-500">Chargement des Vehicules…</div>
               ) : queue.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">Aucun véhicule dans la file</div>
+                <div className="text-center py-8 text-gray-500">Aucun Vehicule dans la file</div>
               ) : (
                 <div className="w-1/3 h-[calc(100vh-320px)] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
                   <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
                     <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
-                      File des véhicules 
+                      File des Vehicules 
                       {reordering && <span className="text-blue-500 ml-2">(Réorganisation…)</span>}
                       {reorderSuccess && <span className="text-green-500 ml-2">✓ Réorganisé !</span>}
                     </h3>
@@ -2231,7 +2192,7 @@ export default function MainPage() {
                           addNotification({
                             type: 'success',
                             title: '1 siège annulé',
-                            message: `Véhicule : ${selectedVehicleForBooking.licensePlate}`,
+                            message: `Vehicule : ${selectedVehicleForBooking.licensePlate}`,
                           });
                           // Refresh queue and summaries
                           setLoading(true);
@@ -2306,7 +2267,14 @@ export default function MainPage() {
       {/* Add Vehicle Modal */}
       <AddVehicleModal
         isOpen={addVehicleModalOpen}
-        onClose={() => setAddVehicleModalOpen(false)}
+        onClose={() => {
+          setAddVehicleModalOpen(false);
+          setVehicleSearchQuery('');
+          setSearchResults([]);
+          setSelectedVehicle(null);
+          setSearchError(null);
+          setLoadingSearch(false);
+        }}
         searchQuery={vehicleSearchQuery}
         onSearchChange={handleSearchInputChange}
         searchResults={searchResults}
@@ -2345,16 +2313,16 @@ export default function MainPage() {
                       <div key={booking.id} className="text-xs bg-white bg-opacity-50 p-2 rounded">
                         <div className="flex justify-between">
                           <span>Siège {index + 1} :</span>
-                          <span className="font-medium">{booking.verificationCode}</span>
-            </div>
+                          <span className="font-medium">{booking.licensePlate}</span>
+                        </div>
                         <div className="flex justify-between">
                           <span>Montant&nbsp;:</span>
                           <span className="font-medium">{booking.totalAmount.toFixed(2)}TND</span>
                         </div>
                         <div className="flex justify-between">
-                          <span>Créé par&nbsp;:</span>
+                          <span>Agent&nbsp;:</span>
                           <span className="font-medium">{booking.createdBy}</span>
-                      </div>
+                        </div>
                     </div>
                   ))}
                 </div>
@@ -2391,9 +2359,13 @@ export default function MainPage() {
                     setLoadingTrips(true);
                     try {
                       setTripsError(null);
+                      console.log('Searching trips with query:', val.trim());
                       const r = await listTodayTrips(val.trim());
+                      console.log('Search trips API response:', r);
                       setTrips(Array.isArray(r.data) ? r.data : []);
+                      console.log('Search trips loaded:', Array.isArray(r.data) ? r.data.length : 0, 'trips');
                     } catch (err) {
+                      console.error('Failed to search trips:', err);
                       setTrips([]);
                       setTripsError('Échec du chargement des trajets. Veuillez réessayer.');
                     } finally {
@@ -2413,7 +2385,7 @@ export default function MainPage() {
                   <div className="p-4 text-center text-gray-500">Aucun trajet trouvé pour aujourd'hui.</div>
                 ) : (
                   <div className="divide-y divide-gray-100">
-                    {trips.map((t) => (
+                    {trips.map((t, index) => (
                       <div key={t.id} className="p-3 flex justify-between items-center">
                         <div className="flex-1">
                           <div className="font-semibold">{t.licensePlate}</div>
@@ -2424,9 +2396,9 @@ export default function MainPage() {
                             {(() => { try { return new Date(t.startTime || '').toLocaleTimeString(); } catch { return '—'; } })()}
                           </div>
                           <button
-                            onClick={() => handlePrintExitPassForTrip(t)}
+                            onClick={() => handlePrintExitPassForTrip(t, index)}
                             className="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Imprimer le laissez-passer pour ce véhicule"
+                            title="Imprimer le laissez-passer pour ce Vehicule"
                           >
                             🚪 Imprimer laissez-passer
                           </button>
