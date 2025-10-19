@@ -1,5 +1,5 @@
 // Booking service for API calls
-const API_BASE_URL = 'http://192.168.192.100:8003/api/v1';
+const API_BASE_URL = 'http://192.168.0.183:8003/api/v1';
 
 export interface BookingRequest {
   queueEntryId: string;
