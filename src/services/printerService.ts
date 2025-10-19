@@ -292,6 +292,7 @@ export class PrinterService {
       destinationName: ticketData.destinationName,
       seatNumber: ticketData.seatNumber,
       totalAmount: ticketData.totalAmount,
+      basePrice: ticketData.basePrice, // Include base price for talon
       createdBy: ticketData.createdBy,
       createdAt: booking?.createdAt || new Date().toISOString(),
       stationName: ticketData.stationName,

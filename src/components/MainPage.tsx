@@ -1613,6 +1613,7 @@ export default function MainPage() {
                 destinationName: ticketData.destinationName,
                 seatNumber: ticketData.seatNumber,
                 totalAmount: booking.totalAmount,
+                basePrice: selected.basePrice || 0, // Add base price for talon
                 createdBy: ticketData.createdBy,
                 createdAt: booking.createdAt,
                 stationName: '',
@@ -2225,7 +2226,7 @@ export default function MainPage() {
                     </Button>
                   )}
                   <div className="text-lg font-semibold">
-                    Total: {(selectedSeats.length * ((selected.basePrice || 0) + 0.2)).toFixed(2)}TND
+                    Total: {(selectedSeats.length * ((selected.basePrice || 0) + 0.15)).toFixed(2)}TND
                   </div>
                   <Button
                     onClick={handleConfirmBooking}
