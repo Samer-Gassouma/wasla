@@ -1,5 +1,6 @@
 // Booking service for API calls
-const API_BASE_URL = 'http://localhost:8003/api/v1';
+import { API } from '../config';
+const API_BASE_URL = `${API.booking}/api/v1`;
 
 export interface BookingRequest {
   queueEntryId: string;

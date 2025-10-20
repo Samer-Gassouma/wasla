@@ -1391,6 +1391,9 @@ export default function MainPage() {
       message: `Ticket de pass journalier réimprimé pour ${dayPassData.licensePlate}`
       });
       
+      // Refresh queue and summaries after reprinting day pass
+      await refreshQueueAndSummaries();
+      
     } catch (error) {
       console.error('Failed to reprint day pass:', error);
       addNotification({
