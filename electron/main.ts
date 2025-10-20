@@ -31,6 +31,9 @@ function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC!, 'icons', 'icon-256x256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+      webSecurity: false, // Allow connections to local network IPs
     },
   })
 
@@ -81,6 +84,10 @@ app.on('activate', () => {
 })
 
 app.whenReady().then(() => {
+  // Disable web security for local network connections
+  app.commandLine.appendSwitch('disable-web-security')
+  app.commandLine.appendSwitch('disable-features', 'VizDisplayCompositor')
+  
   createWindow()
 
   // Create tray icon
