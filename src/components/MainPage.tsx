@@ -1958,6 +1958,36 @@ export default function MainPage() {
                 })) as QueueEntry[];
                 setQueue(items);
               }).catch(console.error);
+            } else if (msg.type === "queue_entry_removed" && !reordering) {
+              // Handle queue entry removal - check if destination should be removed
+              if (msg.data?.queueEmpty === true) {
+                console.log('Queue is now empty for destination:', msg.data.destinationId);
+                // Refresh summaries to remove empty destination
+                listQueueSummaries().then((summariesResponse) => {
+                  setSummaries(summariesResponse.data || []);
+                  
+                  // If the current destination is now empty, clear the queue
+                  if (selected && selected.destinationId === msg.data.destinationId) {
+                    setQueue([]);
+                  }
+                }).catch(console.error);
+              } else {
+                // For other queue events, refetch if not reordering
+                listQueue(selected.destinationId).then((r) => {
+                  const items = (r.data as any[]).map((e) => ({
+                    ...e,
+                    availableSeats: Number(e.availableSeats ?? 0),
+                    totalSeats: Number(e.totalSeats ?? 0),
+                    queuePosition: Number(e.queuePosition ?? 0),
+                    status: e.status,
+                    hasDayPass: e.hasDayPass ?? false,
+                    dayPassStatus: e.dayPassStatus ?? 'no_pass',
+                    dayPassPurchasedAt: e.dayPassPurchasedAt,
+                    hasTripsToday: e.hasTripsToday ?? false,
+                  })) as QueueEntry[];
+                  setQueue(items);
+                }).catch(console.error);
+              }
             } else if (!reordering) {
               // For other queue events, refetch if not reordering
               listQueue(selected.destinationId).then((r) => {
