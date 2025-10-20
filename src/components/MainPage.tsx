@@ -1651,6 +1651,7 @@ export default function MainPage() {
                 destinationName: selected.destinationName,
                 seatNumber: booking.seatNumber || 1, // Use actual seat number from backend
                 totalAmount: booking.totalAmount,
+                basePrice: selected.basePrice || 0, // Include base price for detailed pricing display
                 createdBy: booking.createdByName || booking.createdBy || staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff', // Use staff name from backend
                 createdAt: booking.createdAt,
                 stationName: 'Station', // You might want to get this from context

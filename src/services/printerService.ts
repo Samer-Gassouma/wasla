@@ -274,6 +274,7 @@ export class PrinterService {
       destinationName: destination?.name || 'Unknown Destination',
       seatNumber: booking?.seatNumber || 1,
       totalAmount: booking?.totalAmount || 0,
+      basePrice: destination?.basePrice || vehicle?.basePrice || 0, // Include base price from destination or vehicle
       createdBy: staffName,
       createdAt: booking?.createdAt || new Date().toISOString(),
       stationName: 'Station Name', // You might want to get this from context
