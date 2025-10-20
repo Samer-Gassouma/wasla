@@ -1,3 +1,5 @@
+import { API } from '../config';
+
 // Printer configuration interface
 export interface PrinterConfig {
   id: string;
@@ -89,11 +91,11 @@ export interface TicketData {
 // Printer service class
 export class PrinterService {
   private baseUrl: string;
-  private defaultPrinterId: string = 'printer1';
+  private defaultPrinterId: string = 'default';
   private defaultBrandName: string = 'STE';
   private defaultBrandLogoPath: string = '/icons/ste_260.png';
 
-  constructor(baseUrl: string = 'http://localhost:8005') {
+  constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
   }
 
@@ -305,4 +307,4 @@ export class PrinterService {
 }
 
 // Create a singleton instance
-export const printerService = new PrinterService();
+export const printerService = new PrinterService(API.printer);

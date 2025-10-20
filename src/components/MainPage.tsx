@@ -1270,7 +1270,7 @@ export default function MainPage() {
     }
 
     try {
-      const printerId = "test"; // use configured/default printer id
+      const printerId = "default"; // use configured/default printer id
       const total = bookedSeats * (selected.basePrice ?? 0);
       await printExitPassAndRemove(printerId, {
         queueEntryId: entry.id,
