@@ -93,7 +93,7 @@ export class PrinterService {
   private defaultBrandName: string = 'STE';
   private defaultBrandLogoPath: string = '/icons/ste_260.png';
 
-  constructor(baseUrl: string = 'http://192.168.0.183:8005') {
+  constructor(baseUrl: string = 'http://localhost:8005') {
     this.baseUrl = baseUrl;
   }
 

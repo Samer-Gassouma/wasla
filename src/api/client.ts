@@ -112,6 +112,26 @@ export async function transferSeats(destinationId: string, fromEntryId: string, 
   });
 }
 
+// Printer service
+export async function printExitPassAndRemove(printerId: string, payload: {
+  queueEntryId: string;
+  licensePlate: string;
+  destinationName: string;
+  bookedSeats: number;
+  totalSeats: number;
+  basePrice: number;
+  createdBy: string;
+  stationName?: string;
+  routeName?: string;
+  exitPassCount?: number;
+  companyName?: string;
+  companyLogo?: string;
+  staffFirstName?: string;
+  staffLastName?: string;
+}) {
+  return request<{ message: string }>(API.printer, `/api/printer/print/${printerId}/exitpass-and-remove`, "POST", payload);
+}
+
 export async function changeDestination(destinationId: string, entryId: string, newDestinationId: string, newDestinationName: string) {
   return request<{ data: any }>(API.queue, `/api/v1/queue/${destinationId}/entry/${entryId}/change-destination`, "PUT", {
     newDestinationId,

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips } from "@/api/client";
+import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove } from "@/api/client";
 import { connectQueue } from "@/ws/client";
 import { printerService, TicketData } from "@/services/printerService";
 import { getTodayTripsCount } from "@/services/bookingService";
@@ -91,14 +91,14 @@ function ActionMenu({
   onTransferSeats, 
   onChangeDestination,
   onReprintDayPass,
-  onPrintExitPass
+  onPrintExitPassAndRemove
 }: { 
   entry: QueueEntry;
   onRemove: () => void;
   onTransferSeats: () => void;
   onChangeDestination: () => void;
   onReprintDayPass: () => void;
-  onPrintExitPass: () => void;
+  onPrintExitPassAndRemove: () => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -188,16 +188,17 @@ function ActionMenu({
                 🎫 Réimprimer le pass jour
               </button>
             )}
-            <button
-              onClick={() => {
-                onPrintExitPass();
-                setIsOpen(false);
-              }}
-              className="w-full px-4 py-2 text-left text-sm text-orange-600 hover:bg-orange-50 transition-colors"
-              title="Imprimer le laissez-passer de sortie"
-            >
-              🚪 Imprimer laissez-passer
-            </button>
+          <button
+            onClick={() => {
+              onPrintExitPassAndRemove();
+              setIsOpen(false);
+            }}
+            disabled={!((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0)}
+            className={`w-full px-4 py-2 text-left text-sm transition-colors ${((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0) ? 'text-red-600 hover:bg-red-50' : 'text-gray-400 cursor-not-allowed'}`}
+            title={((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0) ? "Imprimer sortie et retirer du queue" : "Aucun siège réservé"}
+          >
+            🧾 Sortie & Retirer
+          </button>
           </div>
         </div>
       )}
@@ -269,9 +270,15 @@ function TransferSeatsModal({
             <input
               type="number"
               min="1"
-              max={fromEntry.availableSeats}
+              // Limit to booked seats of the source vehicle
+              max={fromEntry.bookedSeats ?? 0}
               value={seatsCount}
-              onChange={(e) => onSeatsCountChange(Number(e.target.value))}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                const max = fromEntry.bookedSeats ?? 0;
+                const clamped = Math.max(1, Math.min(raw, max));
+                onSeatsCountChange(clamped);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -471,6 +478,25 @@ function AddVehicleModal({
         inputRef.current?.focus();
       }, 100);
     }
+  }, [isOpen]);
+
+  // Keep focus on the input if it loses focus due to async UI updates
+  useEffect(() => {
+    if (!isOpen) return;
+    const el = inputRef.current;
+    if (!el) return;
+    const handler = () => {
+      // Re-focus shortly after blur to avoid stealing focus while user clicks a result
+      setTimeout(() => {
+        if (document.activeElement !== el) {
+          el.focus();
+          // Move caret to end
+          const val = el.value; el.value = ''; el.value = val;
+        }
+      }, 50);
+    };
+    el.addEventListener('blur', handler);
+    return () => el.removeEventListener('blur', handler);
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -681,7 +707,7 @@ function SortableQueueItem({
   onTransferSeats,
   onChangeDestination,
   onReprintDayPass,
-  onPrintExitPass,
+  onPrintExitPassAndRemove,
   onSelectForBooking,
   isSelectedForBooking
 }: { 
@@ -694,7 +720,7 @@ function SortableQueueItem({
   onTransferSeats: () => void;
   onChangeDestination: () => void;
   onReprintDayPass: () => void;
-  onPrintExitPass: () => void;
+  onPrintExitPassAndRemove: () => void;
   onSelectForBooking: () => void;
   isSelectedForBooking: boolean;
 }) {
@@ -811,7 +837,7 @@ function SortableQueueItem({
             onTransferSeats={onTransferSeats}
             onChangeDestination={onChangeDestination}
             onReprintDayPass={onReprintDayPass}
-            onPrintExitPass={onPrintExitPass}
+            onPrintExitPassAndRemove={onPrintExitPassAndRemove}
           />
         </div>
       </div>
@@ -859,6 +885,9 @@ export default function MainPage() {
   const [vehicleAuthorizedStations, setVehicleAuthorizedStations] = useState<any[]>([]);
   const [loadingVehicleStations, setLoadingVehicleStations] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Robust search control
+  const vehicleSearchDebounceRef = useRef<number | null>(null);
+  const latestSearchSeqRef = useRef(0);
   
   // Booking state
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -1229,10 +1258,53 @@ export default function MainPage() {
     setTransferModalOpen(true);
   };
 
+  const handlePrintExitPassAndRemove = async (entryId: string) => {
+    if (!selected) return;
+    const entry = queue.find(item => item.id === entryId);
+    if (!entry) return;
+
+    const bookedSeats = entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats);
+    if (bookedSeats <= 0) {
+      alert("Aucun siège réservé à imprimer pour ce Vehicule.");
+      return;
+    }
+
+    try {
+      const printerId = "test"; // use configured/default printer id
+      const total = bookedSeats * (selected.basePrice ?? 0);
+      await printExitPassAndRemove(printerId, {
+        queueEntryId: entry.id,
+        licensePlate: entry.licensePlate,
+        destinationName: selected.destinationName,
+        bookedSeats,
+        totalSeats: entry.totalSeats,
+        basePrice: selected.basePrice ?? 0,
+        createdBy: (staffInfo?.firstName || "") + (staffInfo?.lastName ? " " + staffInfo.lastName : ""),
+        stationName: selected.destinationName,
+        routeName: selected.destinationName,
+        companyName: "Louaj Transport",
+        staffFirstName: staffInfo?.firstName,
+        staffLastName: staffInfo?.lastName,
+      });
+
+      await refreshQueueAndSummaries();
+      addNotification({ type: 'success', title: 'Autorisation sortie', message: `Imprimé. Total ${total.toFixed(2)} TND. Vehicule retiré de la file.` });
+    } catch (e) {
+      console.error(e);
+      alert("Échec de l'impression d'autorisation de sortie.");
+    }
+  };
+
   const handleConfirmTransfer = async (toEntry: QueueEntry) => {
     if (!selected || !transferFromEntry) return;
     
     try {
+      // Validate requested seats do not exceed booked seats of source vehicle
+      const maxTransferable = transferFromEntry.bookedSeats ?? 0;
+      if (transferSeatsCount < 1 || transferSeatsCount > maxTransferable) {
+        alert(`Vous ne pouvez transférer que jusqu'à ${maxTransferable} sièges réservés.`);
+        return;
+      }
       console.log('Transfer seats request:', {
         destinationId: selected.destinationId,
         fromEntryId: transferFromEntry.id,
@@ -1329,47 +1401,7 @@ export default function MainPage() {
     }
   };
 
-  const handlePrintExitPass = async (entry: QueueEntry) => {
-    try {
-      if (!selected) {
-        addNotification({
-          type: 'error',
-          title: 'Aucune destination sélectionnée',
-          message: 'Veuillez d\'abord sélectionner une destination'
-        });
-        return;
-      }
-
-      // Create exit pass ticket data manually
-      const exitPassTicketData: TicketData = {
-        licensePlate: entry.licensePlate,
-        destinationName: selected.destinationName,
-        seatNumber: 0, // Not applicable for exit pass
-        totalAmount: selected.basePrice * entry.totalSeats, // Total price for all seats
-        createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff',
-        createdAt: new Date().toISOString(),
-        stationName: 'Station',
-        routeName: selected.destinationName,
-      };
-      
-      // Print the exit pass ticket
-      await printerService.printExitPassTicket('printer1', exitPassTicketData);
-      
-      addNotification({
-        type: 'success',
-        title: 'Laissez-passer imprimé',
-        message: `Laissez-passer imprimé pour ${entry.licensePlate}`
-      });
-      
-    } catch (error) {
-      console.error('Failed to print exit pass:', error);
-      addNotification({
-        type: 'error',
-        title: "Échec de l'impression",
-        message: `Échec de l'impression du laissez-passer de sortie : ${error}`
-      });
-    }
-  };
+  // handlePrintExitPass removed in favor of print & remove flow
 
   const handlePrintExitPassForTrip = async (trip: any, tripIndex: number) => {
     try {
@@ -1439,16 +1471,20 @@ export default function MainPage() {
       return;
     }
     
+    const seq = ++latestSearchSeqRef.current;
     setLoadingSearch(true);
     setSearchError(null);
-    
     try {
       const response = await searchVehicles(query);
       // Ensure we have valid data
-      if (response && response.data && Array.isArray(response.data)) {
-        setSearchResults(response.data);
+      if (seq !== latestSearchSeqRef.current) {
+        // Obsolete response; ignore
+        return;
+      }
+      if (response && (response as any).data && Array.isArray((response as any).data)) {
+        setSearchResults((response as any).data);
         // If no results found, show a helpful message
-        if (response.data.length === 0) {
+        if ((response as any).data.length === 0) {
           setSearchError(null); // Clear any previous errors
         }
       } else {
@@ -1457,16 +1493,25 @@ export default function MainPage() {
       }
     } catch (error) {
       console.error('Échec de la recherche de Vehicules :', error);
-      setSearchResults([]);
-      setSearchError('Échec de la recherche de Vehicules. Veuillez réessayer.');
+      if (seq === latestSearchSeqRef.current) {
+        setSearchResults([]);
+        setSearchError('Échec de la recherche de Vehicules. Veuillez réessayer.');
+      }
     } finally {
-      setLoadingSearch(false);
+      if (seq === latestSearchSeqRef.current) {
+        setLoadingSearch(false);
+      }
     }
   };
 
   const handleSearchInputChange = (query: string) => {
     setVehicleSearchQuery(query);
-    handleVehicleSearch(query);
+    if (vehicleSearchDebounceRef.current) {
+      window.clearTimeout(vehicleSearchDebounceRef.current);
+    }
+    vehicleSearchDebounceRef.current = window.setTimeout(() => {
+      handleVehicleSearch(query);
+    }, 300);
   };
 
   const handleSelectVehicle = async (vehicle: any) => {
@@ -1499,6 +1544,7 @@ export default function MainPage() {
     if (!selectedVehicle) return;
     
     try {
+      setLoadingVehicleStations(true);
       const response = await addVehicleToQueue(station.stationId, selectedVehicle.id, station.stationName);
       
       // Handle day pass status based on response
@@ -1563,6 +1609,8 @@ export default function MainPage() {
     } catch (error) {
       console.error('Échec de l\'ajout du Vehicule à la file :', error);
       alert('Échec de l\'ajout du Vehicule à la file. Veuillez réessayer.');
+    } finally {
+      setLoadingVehicleStations(false);
     }
   };
 
@@ -1632,8 +1680,8 @@ export default function MainPage() {
           console.log('Vehicle is fully booked, printing exit pass for:', exitPass.licensePlate);
           
           try {
-            // Get current trip count for today (this will be the index for the new trip)
-            const tripCountResponse = await getTodayTripsCount();
+            // Get current trip count for today for this specific destination (this will be the index for the new trip)
+            const tripCountResponse = await getTodayTripsCount(exitPass.destinationId);
             const currentTripCount = tripCountResponse.data.count;
             
             const exitPassTicketData: TicketData = {
@@ -2000,6 +2048,19 @@ export default function MainPage() {
         <div className="flex-1 flex justify-end items-center space-x-4">
           <PrinterStatusDisplay />
           <LatencyDisplay connected={wsConnected} latency={wsLatency} compact={true} />
+          <Button
+            variant="outline"
+            onClick={async () => {
+              try {
+                await refreshQueueAndSummaries();
+                addNotification({ type: 'success', title: 'Actualisé', message: 'Données de la file et destinations mises à jour.' });
+              } catch (e) {
+                addNotification({ type: 'error', title: 'Échec', message: "Échec de l'actualisation." });
+              }
+            }}
+          >
+            Rafraîchir
+          </Button>
           <Button 
             onClick={() => setAddVehicleModalOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 text-white"
@@ -2125,7 +2186,7 @@ export default function MainPage() {
                               }
                             }}
                             onReprintDayPass={() => handleReprintDayPass(entry.vehicleId)}
-                            onPrintExitPass={() => handlePrintExitPass(entry)}
+                            onPrintExitPassAndRemove={() => handlePrintExitPassAndRemove(entry.id)}
                             isSelectedForBooking={selectedVehicleForBooking?.id === entry.id}
                           />
                         ))}

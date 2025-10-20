@@ -1,5 +1,5 @@
 // Booking service for API calls
-const API_BASE_URL = 'http://192.168.0.183:8003/api/v1';
+const API_BASE_URL = 'http://localhost:8003/api/v1';
 
 export interface BookingRequest {
   queueEntryId: string;
@@ -58,8 +58,11 @@ export const createBookingByQueueEntry = async (request: BookingRequest): Promis
 };
 
 // Get today's trips count
-export const getTodayTripsCount = async (): Promise<TripCountResponse> => {
-  const response = await apiRequest(`${API_BASE_URL}/trips/today/count`);
+export const getTodayTripsCount = async (destinationId?: string): Promise<TripCountResponse> => {
+  const url = destinationId 
+    ? `${API_BASE_URL}/trips/today/count?destination_id=${encodeURIComponent(destinationId)}`
+    : `${API_BASE_URL}/trips/today/count`;
+  const response = await apiRequest(url);
   return response.json();
 };
 
