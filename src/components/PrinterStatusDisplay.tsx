@@ -10,8 +10,8 @@ export default function PrinterStatusDisplay({ onConfigUpdate }: PrinterStatusDi
   const [status, setStatus] = useState<PrinterStatus>({ connected: false });
   const [loading, setLoading] = useState(false);
   const [showIpModal, setShowIpModal] = useState(false);
-  const [currentIp, setCurrentIp] = useState('192.168.1.100');
-  const [newIp, setNewIp] = useState('192.168.1.100');
+  const [currentIp, setCurrentIp] = useState('');
+  const [newIp, setNewIp] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -62,6 +62,7 @@ export default function PrinterStatusDisplay({ onConfigUpdate }: PrinterStatusDi
     try {
       const config = printerIpConfigService.getConfig();
       setCurrentIp(config.ip);
+      setNewIp(config.ip);
     } catch (err) {
       console.error('Failed to load printer config:', err);
     }
