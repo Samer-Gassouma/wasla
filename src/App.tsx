@@ -4,6 +4,7 @@ import InitScreen from '@/components/InitScreen'
 import LoginScreen from '@/components/LoginScreen'
 import { setAuthToken } from '@/api/client'
 import MainPage from '@/components/MainPage'
+import { StationProvider } from '@/contexts/StationContext'
 
 function App() {
   const [stage, setStage] = useState<'init' | 'login' | 'app'>('init')
@@ -32,7 +33,9 @@ function App() {
     if (stage === 'init') return <InitScreen onReady={handleInitReady} />
     if (stage === 'login') return <LoginScreen onLoggedIn={handleLoggedIn} />
     return (
-      <MainPage />
+      <StationProvider>
+        <MainPage />
+      </StationProvider>
     )
   }, [stage, handleInitReady, handleLoggedIn, token])
 

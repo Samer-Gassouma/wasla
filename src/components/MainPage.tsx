@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove } from "@/api/client";
+import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove, createGhostBooking, getGhostBookingCount, getAllDestinations } from "@/api/client";
 import { connectQueue } from "@/ws/client";
 import { printerService, TicketData } from "@/services/printerService";
 import { getTodayTripsCount } from "@/services/bookingService";
 import PrinterStatusDisplay from "@/components/PrinterStatusDisplay";
 import LatencyDisplay from "@/components/LatencyDisplay";
+import { useStation } from "@/contexts/StationContext";
 import {
   DndContext,
   closestCenter,
@@ -857,6 +858,8 @@ function SortableQueueItem({
 }
 
 export default function MainPage() {
+  const { selectedStation, setShowStationSelection } = useStation();
+  
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Summary | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
@@ -890,9 +893,34 @@ export default function MainPage() {
   const latestSearchSeqRef = useRef(0);
   
   // Booking state
-  const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
+  const [selectedSeats, setSelectedSeats] = useState<number[]>([1]); // Default to 1 seat
   const [bookingLoading, setBookingLoading] = useState(false);
   const [selectedVehicleForBooking, setSelectedVehicleForBooking] = useState<QueueEntry | null>(null);
+  
+  // Ghost booking state
+  const [ghostBookingCounts, setGhostBookingCounts] = useState<Record<string, number>>({});
+  const [isGhostMode, setIsGhostMode] = useState(false);
+  const [selectedGhostDestination, setSelectedGhostDestination] = useState<Summary | null>(null);
+  const [allDestinations, setAllDestinations] = useState<Array<{ id: string; name: string; basePrice: number; isActive: boolean }>>([]);
+  
+  // Load ghost booking counts for all destinations
+  const loadGhostBookingCounts = async () => {
+    try {
+      const counts: Record<string, number> = {};
+      for (const summary of summaries) {
+        try {
+          const response = await getGhostBookingCount(summary.destinationId);
+          counts[summary.destinationId] = response.data.count;
+        } catch (error) {
+          console.error(`Failed to load ghost count for ${summary.destinationId}:`, error);
+          counts[summary.destinationId] = 0;
+        }
+      }
+      setGhostBookingCounts(counts);
+    } catch (error) {
+      console.error('Failed to load ghost booking counts:', error);
+    }
+  };
   
   // Notification state
   const [notifications, setNotifications] = useState<Array<{
@@ -966,8 +994,9 @@ export default function MainPage() {
         }
       }
       
-      // Always refresh queue summaries to update seat counts across all destinations
-      const summariesResponse = await listQueueSummaries();
+      // Always refresh queue summaries with station filtering
+      const stationId = selectedStation?.id || 'all';
+      const summariesResponse = await listQueueSummaries(stationId);
       setSummaries(summariesResponse.data || []);
       
       console.log('Queue and summaries refreshed successfully');
@@ -1382,8 +1411,8 @@ export default function MainPage() {
         routeName: dayPassData.destinationName,
       };
       
-      // Print the day pass ticket
-      await printerService.printDayPassTicket('printer1', ticketData);
+       // Print the day pass ticket
+       await printerService.printDayPassTicket(ticketData);
       
       addNotification({
         type: 'success',
@@ -1427,8 +1456,8 @@ export default function MainPage() {
         exitPassCount: tripIndex + 1,
       };
       
-      // Print the exit pass ticket
-      await printerService.printExitPassTicket('printer1', exitPassTicketData);
+       // Print the exit pass ticket
+       await printerService.printExitPassTicket(exitPassTicketData);
       
       addNotification({
         type: 'success',
@@ -1565,9 +1594,9 @@ export default function MainPage() {
           routeName: dayPassData.destinationName,
         };
         
-        // Print the day pass ticket automatically
-        try {
-          await printerService.printDayPassTicket('printer1', ticketData);
+         // Print the day pass ticket automatically
+         try {
+           await printerService.printDayPassTicket(ticketData);
           addNotification({
             type: 'success',
             title: 'Pass journalier créé et imprimé',
@@ -1630,6 +1659,7 @@ export default function MainPage() {
     
     try {
       if (selectedVehicleForBooking) {
+        // Booking with specific vehicle selected
         const response = await createBookingByQueueEntry({
           queueEntryId: selectedVehicleForBooking.id,
           seats: selectedSeats.length
@@ -1658,7 +1688,7 @@ export default function MainPage() {
                 routeName: selected.destinationName,
               };
               
-              await printerService.printBookingTicket('printer1', ticketData);
+              await printerService.printBookingTicket(ticketData);
               // Immediately print a small talon with plate, seat index, date/time
               const talonData: TicketData = {
                 licensePlate: ticketData.licensePlate,
@@ -1671,7 +1701,7 @@ export default function MainPage() {
                 stationName: '',
                 routeName: '',
               };
-              await printerService.printTalon('printer1', talonData);
+              await printerService.printTalon(talonData);
             }
           } catch (printError) {
             console.error('Failed to print tickets:', printError);
@@ -1705,7 +1735,7 @@ export default function MainPage() {
             };
             
             console.log('Printing exit pass:', exitPassTicketData);
-            await printerService.printExitPassTicket('printer1', exitPassTicketData);
+            await printerService.printExitPassTicket(exitPassTicketData);
             console.log('Exit pass printed successfully');
             
             // Remove vehicle from queue after successful exit pass printing
@@ -1748,6 +1778,8 @@ export default function MainPage() {
             : undefined
         });
       } else {
+        // Booking by destination only (no specific vehicle selected)
+        console.log('Creating booking by destination:', selected.destinationId, 'seats:', selectedSeats.length);
         const response = await createBookingByDestination({
           destinationId: selected.destinationId,
           seats: selectedSeats.length,
@@ -1769,7 +1801,7 @@ export default function MainPage() {
               routeName: selected.destinationName,
             };
             
-            await printerService.printBookingTicket('printer1', ticketData);
+            await printerService.printBookingTicket(ticketData);
             const talonData: TicketData = {
               licensePlate: ticketData.licensePlate,
               destinationName: ticketData.destinationName,
@@ -1780,7 +1812,7 @@ export default function MainPage() {
               stationName: '',
               routeName: '',
             };
-            await printerService.printTalon('printer1', talonData);
+            await printerService.printTalon(talonData);
           } catch (printError) {
             console.error('Failed to print ticket:', printError);
           }
@@ -1789,15 +1821,15 @@ export default function MainPage() {
         addNotification({
           type: 'success',
           title: `Réservation réussie de ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}`,
-          message: `Vehicule : ${b?.licensePlate || 'Attribué automatiquement'}`,
+          message: `Vehicule : ${b?.licensePlate || 'Attribué automatiquement'} - ${selectedSeats.length} ticket${selectedSeats.length === 1 ? '' : 's'} imprimé`,
         });
       }
       
       // Automatically refresh queue and summaries after booking completion
       await refreshQueueAndSummaries();
       
-      // Clear selected seats; keep the vehicle selection if any
-      setSelectedSeats([]);
+      // Clear selected seats; reset to default 1 seat
+      setSelectedSeats([1]);
       
       console.log(`Successfully booked ${selectedSeats.length} seats for ${selectedVehicleForBooking?.licensePlate || 'auto-selected vehicle'} on route ${selected.destinationName}`);
     } catch (error) {
@@ -1813,8 +1845,113 @@ export default function MainPage() {
     }
   };
 
+  // Load all destinations from routes table
+  const loadAllDestinations = async () => {
+    try {
+      const response = await getAllDestinations();
+      setAllDestinations(response.data || []);
+    } catch (error) {
+      console.error('Failed to load destinations:', error);
+    }
+  };
+
+  // Ghost mode handlers
+  const handleEnterGhostMode = async () => {
+    setIsGhostMode(true);
+    setSelectedGhostDestination(null);
+    await loadAllDestinations();
+  };
+
+  const handleExitGhostMode = () => {
+    setIsGhostMode(false);
+    setSelectedGhostDestination(null);
+  };
+
+  const handleGhostDestinationSelect = (destination: { id: string; name: string; basePrice: number; isActive: boolean }) => {
+    // Convert to Summary format for compatibility
+    const summaryDestination: Summary = {
+      destinationId: destination.id,
+      destinationName: destination.name,
+      totalVehicles: 0,
+      totalSeats: 0,
+      availableSeats: 0,
+      basePrice: destination.basePrice
+    };
+    setSelectedGhostDestination(summaryDestination);
+  };
+
+  const handleGhostBooking = async () => {
+    if (!selectedGhostDestination || selectedSeats.length === 0) return;
+    
+    setBookingLoading(true);
+    
+    try {
+      console.log('Creating ghost booking for destination:', selectedGhostDestination.destinationId, 'seats:', selectedSeats.length);
+      const response = await createGhostBooking(selectedGhostDestination.destinationId, selectedSeats.length);
+      const ghostBooking = (response as any).data;
+      
+      // Print ghost ticket
+      if (ghostBooking) {
+        try {
+          const ticketData: TicketData = {
+            licensePlate: 'N/A', // Ghost booking has no vehicle
+            destinationName: selectedGhostDestination.destinationName,
+            seatNumber: ghostBooking.seatNumber || 1,
+            totalAmount: ghostBooking.totalAmount || 0,
+            createdBy: ghostBooking.createdByName || 'Agent',
+            createdAt: ghostBooking.createdAt || new Date().toISOString(),
+            stationName: 'Station',
+            routeName: selectedGhostDestination.destinationName,
+          };
+          
+          await printerService.printBookingTicket(ticketData);
+          
+          // Print talon
+          const talonData: TicketData = {
+            licensePlate: 'N/A',
+            destinationName: ticketData.destinationName,
+            seatNumber: ticketData.seatNumber,
+            totalAmount: ticketData.totalAmount,
+            createdBy: ticketData.createdBy,
+            createdAt: ticketData.createdAt,
+            stationName: '',
+            routeName: '',
+          };
+          await printerService.printTalon(talonData);
+        } catch (printError) {
+          console.error('Failed to print ghost ticket:', printError);
+        }
+      }
+      
+      addNotification({
+        type: 'success',
+        title: `Réservation fantôme réussie de ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}`,
+        message: `Ticket fantôme #${ghostBooking?.seatNumber || 1} imprimé pour ${selectedGhostDestination.destinationName}`,
+      });
+      
+      // Refresh ghost booking counts
+      await loadGhostBookingCounts();
+      
+      // Reset to default 1 seat
+      setSelectedSeats([1]);
+      
+      console.log(`Successfully created ghost booking for ${selectedSeats.length} seats on route ${selectedGhostDestination.destinationName}`);
+    } catch (error) {
+      console.error('Échec de la création de la réservation fantôme :', error);
+      const message = (error as any)?.message || 'Échec de la création de la réservation fantôme. Veuillez réessayer.';
+      addNotification({
+        type: 'error',
+        title: 'Échec de la réservation fantôme',
+        message
+      });
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   useEffect(() => {
-    listQueueSummaries().then((r) => {
+    const stationId = selectedStation?.id || 'all';
+    listQueueSummaries(stationId).then((r) => {
       const data = (r as any)?.data || [];
       setSummaries(data);
       // Auto-select first destination on app load to bring data/WS online immediately
@@ -1824,7 +1961,14 @@ export default function MainPage() {
     }).catch((err) => {
       console.error('Failed to load queue summaries:', err);
     });
-  }, []);
+  }, [selectedStation]);
+
+  // Load ghost booking counts when summaries change
+  useEffect(() => {
+    if (summaries.length > 0) {
+      loadGhostBookingCounts();
+    }
+  }, [summaries]);
 
   // Restore selected vehicle whenever queue changes
   useEffect(() => {
@@ -1963,7 +2107,8 @@ export default function MainPage() {
               if (msg.data?.queueEmpty === true) {
                 console.log('Queue is now empty for destination:', msg.data.destinationId);
                 // Refresh summaries to remove empty destination
-                listQueueSummaries().then((summariesResponse) => {
+                const stationId = selectedStation?.id || 'all';
+                listQueueSummaries(stationId).then((summariesResponse) => {
                   setSummaries(summariesResponse.data || []);
                   
                   // If the current destination is now empty, clear the queue
@@ -2025,7 +2170,7 @@ export default function MainPage() {
               };
               
               // Print the day pass ticket automatically
-              printerService.printDayPassTicket('printer1', ticketData)
+              printerService.printDayPassTicket(ticketData)
                 .then(() => {
                   console.log("Day pass ticket printed successfully");
                   addNotification({
@@ -2078,10 +2223,26 @@ export default function MainPage() {
         </div>
         <div className="flex-1 flex justify-center">
             <h1 className="text-2xl font-semibold">Files de station</h1>
+            {selectedStation && (
+              <div className="ml-4 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                {selectedStation.name}
+              </div>
+            )}
         </div>
-        <div className="flex-1 flex justify-end items-center space-x-4">
-          <PrinterStatusDisplay />
-          <LatencyDisplay connected={wsConnected} latency={wsLatency} compact={true} />
+          <div className="flex-1 flex justify-end items-center space-x-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowStationSelection(true)}
+              title="Changer de station"
+            >
+              🏢 Station
+            </Button>
+            <PrinterStatusDisplay onConfigUpdate={() => {
+              console.log('Printer config updated, refreshing status...');
+              // The PrinterStatusDisplay will automatically refresh its own status
+            }} />
+            <LatencyDisplay connected={wsConnected} latency={wsLatency} compact={true} />
           <Button
             variant="outline"
             onClick={async () => {
@@ -2114,35 +2275,118 @@ export default function MainPage() {
 
       {/* Main Content - Scrollable */}
       <div className="flex-1 overflow-y-auto">
-        {/* Station Cards - Full Width */}
-        <div className="py-6 w-full">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-12 gap-4 px-6">
-            {(summaries || []).map((s) => (
-              <Card
-                key={s.destinationId}
-                className={`p-4 text-center cursor-pointer transition-colors ${
-                  selected?.destinationId === s.destinationId 
-                    ? "bg-blue-50 border-blue-500 border-2" 
-                    : "hover:bg-gray-50"
-                }`}
-                onClick={() => {
-                  setSelected(s);
-                  // Clear selected vehicle when switching routes
-                  setSelectedVehicleForBooking(null);
-                  setSelectedSeats([]);
-                  saveSelectedVehicle(null);
-                }}
-              >
-                <h2 className="text-lg font-semibold">{s.destinationName}</h2>
-                <p className="text-2xl font-bold text-blue-600 mt-2">{s.availableSeats}</p>
-  <span className="text-sm text-gray-500">sièges disponibles</span>
-              </Card>
-            ))}
+        {/* Ghost Mode or Station Cards */}
+        {isGhostMode ? (
+          <div className="py-6 w-full">
+            <div className="px-6 mb-4">
+              <h2 className="text-xl font-semibold text-purple-700 mb-2">👻 Mode Fantôme - Sélectionner une destination</h2>
+              <p className="text-gray-600">Choisissez une destination pour créer une réservation fantôme</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-12 gap-4 px-6">
+              {allDestinations.map((dest) => (
+                <Card
+                  key={dest.id}
+                  className={`p-4 text-center cursor-pointer transition-colors relative ${
+                    selectedGhostDestination?.destinationId === dest.id 
+                      ? "bg-purple-50 border-purple-500 border-2" 
+                      : "hover:bg-purple-50"
+                  }`}
+                  onClick={() => handleGhostDestinationSelect(dest)}
+                >
+                  {/* Ghost booking count badge */}
+                  {ghostBookingCounts[dest.id] > 0 && (
+                    <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                      {ghostBookingCounts[dest.id]}
+                    </div>
+                  )}
+                  <h2 className="text-lg font-semibold">{dest.name}</h2>
+                  <p className="text-2xl font-bold text-purple-600 mt-2">{dest.basePrice.toFixed(2)}</p>
+                  <span className="text-sm text-gray-500">DT</span>
+                </Card>
+              ))}
+            </div>
+            
+            {/* Ghost Booking Section */}
+            {selectedGhostDestination && (
+              <div className="px-6 py-6">
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
+                  <h3 className="text-lg font-semibold text-purple-800 mb-4">
+                    👻 Réservation Fantôme - {selectedGhostDestination.destinationName}
+                  </h3>
+                  
+                  {/* Seat Selection */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Nombre de sièges</label>
+                    <div className="flex space-x-2">
+                      {[1, 2, 3, 4, 5].map((num) => (
+                        <Button
+                          key={num}
+                          variant={selectedSeats.includes(num) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setSelectedSeats([num])}
+                          className={selectedSeats.includes(num) ? "bg-purple-600 hover:bg-purple-700" : ""}
+                        >
+                          {num}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Booking Button */}
+                  <Button
+                    onClick={handleGhostBooking}
+                    disabled={bookingLoading || selectedSeats.length === 0}
+                    className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white py-3 rounded-xl shadow-lg"
+                  >
+                    {bookingLoading ? (
+                      <span className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Création...
+                      </span>
+                    ) : (
+                      `👻 Créer Réservation Fantôme (${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'})`
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="py-6 w-full">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-12 gap-4 px-6">
+              {(summaries || []).map((s) => (
+                <Card
+                  key={s.destinationId}
+                  className={`p-4 text-center cursor-pointer transition-colors relative ${
+                    selected?.destinationId === s.destinationId 
+                      ? "bg-blue-50 border-blue-500 border-2" 
+                      : "hover:bg-gray-50"
+                  }`}
+                  onClick={() => {
+                    setSelected(s);
+                    // Clear selected vehicle when switching routes
+                    setSelectedVehicleForBooking(null);
+                    setSelectedSeats([]);
+                    saveSelectedVehicle(null);
+                  }}
+                >
+                  {/* Ghost booking count badge */}
+                  {ghostBookingCounts[s.destinationId] > 0 && (
+                    <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                      {ghostBookingCounts[s.destinationId]}
+                    </div>
+                  )}
+                  <h2 className="text-lg font-semibold">{s.destinationName}</h2>
+                  <p className="text-2xl font-bold text-blue-600 mt-2">{s.availableSeats}</p>
+                  <span className="text-sm text-gray-500">sièges disponibles</span>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Global actions row (visible even without selected destination) */}
-        <div className="px-6 mb-2 flex justify-end">
+        <div className="px-6 mb-2 flex justify-end space-x-4">
           <Button
             className="bg-gray-700 hover:bg-gray-800 text-white"
             onClick={async () => {
@@ -2166,6 +2410,23 @@ export default function MainPage() {
           >
             Voir les trajets d'aujourd'hui
           </Button>
+          
+          {/* Ghost Mode Button */}
+          {!isGhostMode ? (
+            <Button
+              onClick={handleEnterGhostMode}
+              className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-2 rounded-xl shadow-lg"
+            >
+              👻 Mode Fantôme
+            </Button>
+          ) : (
+            <Button
+              onClick={handleExitGhostMode}
+              className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-6 py-2 rounded-xl shadow-lg"
+            >
+              ❌ Sortir du Mode Fantôme
+            </Button>
+          )}
         </div>
 
         {/* Vehicle Queue */}
@@ -2178,7 +2439,12 @@ export default function MainPage() {
               {loading ? (
                 <div className="text-center py-8 text-gray-500">Chargement des Vehicules…</div>
               ) : queue.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">Aucun Vehicule dans la file</div>
+                <div className="text-center py-8">
+                  <div className="text-gray-500 mb-4">Aucun Vehicule dans la file</div>
+                  <div className="text-xs text-gray-400 mt-2">
+                    Utilisez le bouton "Mode Fantôme" ci-dessus pour créer des réservations
+                  </div>
+                </div>
               ) : (
                 <div className="w-1/3 h-[calc(100vh-320px)] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
                   <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
@@ -2238,6 +2504,20 @@ export default function MainPage() {
       {selected && (
         <div className="absolute bottom-0 right-0 w-2/3 max-h-[66vh] bg-white shadow-xl overflow-y-auto">
           <div className="py-3 pr-3 pl-5">
+            {/* Booking Section Header */}
+            <div className="mb-4 pb-2 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Réservation pour {selected.destinationName}
+              </h3>
+              <div className="text-sm text-gray-600 mt-1">
+                {selectedVehicleForBooking ? (
+                  <>Véhicule sélectionné: <span className="font-medium text-blue-600">{selectedVehicleForBooking.licensePlate}</span></>
+                ) : (
+                  <>Aucun véhicule sélectionné - <span className="font-medium text-green-600">attribution automatique</span></>
+                )}
+              </div>
+            </div>
+            
             <div className="flex h-full gap-4 items-end">
               {/* Left: Seat buttons at bottom */}
               <div className="flex-1 flex flex-col h-full">
@@ -2328,7 +2608,7 @@ export default function MainPage() {
                     disabled={bookingLoading || selectedSeats.length === 0}
                     className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 py-4 text-base font-bold w-full rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {bookingLoading ? 'Traitement…' : `Réserver (${selectedSeats.length || 0})`}
+                    {bookingLoading ? 'Traitement…' : `Réserver ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}${selectedVehicleForBooking ? ` (${selectedVehicleForBooking.licensePlate})` : ' (auto-assigné)'}`}
                   </Button>
                 </div>
               </div>

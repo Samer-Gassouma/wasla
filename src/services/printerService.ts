@@ -1,4 +1,5 @@
 import { API } from '../config';
+import { printerIpConfigService, PrinterIpConfig } from './printerIpConfigService';
 
 // Printer configuration interface
 export interface PrinterConfig {
@@ -91,7 +92,6 @@ export interface TicketData {
 // Printer service class
 export class PrinterService {
   private baseUrl: string;
-  private defaultPrinterId: string = 'default';
   private defaultBrandName: string = 'STE';
   private defaultBrandLogoPath: string = '/icons/ste_260.png';
 
@@ -99,13 +99,9 @@ export class PrinterService {
     this.baseUrl = baseUrl;
   }
 
-  // Get printer configuration
-  async getPrinterConfig(printerId: string = this.defaultPrinterId): Promise<PrinterConfig> {
-    const response = await fetch(`${this.baseUrl}/api/printer/config/${printerId}`);
-    if (!response.ok) {
-      throw new Error(`Failed to get printer config: ${response.statusText}`);
-    }
-    return response.json();
+  // Get printer configuration from local storage
+  async getPrinterConfig(): Promise<PrinterIpConfig> {
+    return printerIpConfigService.getConfig();
   }
 
   // Update printer configuration
@@ -122,15 +118,9 @@ export class PrinterService {
     }
   }
 
-  // Test printer connection
-  async testPrinterConnection(printerId: string = this.defaultPrinterId): Promise<PrinterStatus> {
-    const response = await fetch(`${this.baseUrl}/api/printer/test/${printerId}`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to test printer connection: ${response.statusText}`);
-    }
-    return response.json();
+  // Test printer connection using local configuration
+  async testPrinterConnection(): Promise<PrinterStatus> {
+    return await printerIpConfigService.testPrinterConnection();
   }
 
   // Get print queue
@@ -183,84 +173,114 @@ export class PrinterService {
     };
   }
 
-  // Print booking ticket
-  async printBookingTicket(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/booking`, {
+  // Print booking ticket using local printer configuration
+  async printBookingTicket(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/booking`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print booking ticket: ${response.statusText}`);
     }
   }
 
-  // Print entry ticket
-  async printEntryTicket(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/entry`, {
+  // Print entry ticket using local printer configuration
+  async printEntryTicket(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/entry`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print entry ticket: ${response.statusText}`);
     }
   }
 
-  // Print exit ticket
-  async printExitTicket(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/exit`, {
+  // Print exit ticket using local printer configuration
+  async printExitTicket(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/exit`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print exit ticket: ${response.statusText}`);
     }
   }
 
-  // Print day pass ticket
-  async printDayPassTicket(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/daypass`, {
+  // Print day pass ticket using local printer configuration
+  async printDayPassTicket(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/daypass`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print day pass ticket: ${response.statusText}`);
     }
   }
 
-  // Print exit pass ticket
-  async printExitPassTicket(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/exitpass`, {
+  // Print exit pass ticket using local printer configuration
+  async printExitPassTicket(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/exitpass`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print exit pass ticket: ${response.statusText}`);
     }
   }
 
-  // Print talon
-  async printTalon(printerId: string, ticketData: TicketData): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/printer/${printerId}/print/talon`, {
+  // Print talon using local printer configuration
+  async printTalon(ticketData: TicketData): Promise<void> {
+    const printerConfig = await this.getPrinterConfig();
+    
+    const response = await fetch(`${this.baseUrl}/api/printer/print/talon`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(this.withBranding(ticketData)),
+      body: JSON.stringify({
+        ...this.withBranding(ticketData),
+        printerConfig: printerConfig
+      }),
     });
     if (!response.ok) {
       throw new Error(`Failed to print talon: ${response.statusText}`);
@@ -286,9 +306,9 @@ export class PrinterService {
   }
 
   // Helper method to print ticket after booking
-  async printTicketAfterBooking(booking: any, vehicle: any, destination: any, staffName: string, printerId: string = this.defaultPrinterId, staffFirstName?: string, staffLastName?: string): Promise<void> {
+  async printTicketAfterBooking(booking: any, vehicle: any, destination: any, staffName: string, staffFirstName?: string, staffLastName?: string): Promise<void> {
     const ticketData = this.createTicketDataFromBooking(booking, vehicle, destination, staffName, staffFirstName, staffLastName);
-    await this.printBookingTicket(printerId, ticketData);
+    await this.printBookingTicket(ticketData);
     // Follow with a talon containing plate, seat index, timestamp
     const talonData: TicketData = {
       licensePlate: ticketData.licensePlate,
@@ -303,7 +323,7 @@ export class PrinterService {
       staffFirstName: staffFirstName || '',
       staffLastName: staffLastName || '',
     };
-    await this.printTalon(printerId, talonData);
+    await this.printTalon(talonData);
   }
 }
 

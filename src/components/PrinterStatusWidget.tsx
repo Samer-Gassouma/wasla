@@ -30,7 +30,7 @@ export default function PrinterStatusWidget({ printerId = 'printer1', compact = 
     setError(null);
     try {
       const [printerStatus, queueStatus] = await Promise.all([
-        printerService.testPrinterConnection(printerId),
+        printerService.testPrinterConnection(),
         printerService.getPrintQueueStatus(),
       ]);
       setStatus(printerStatus);
@@ -57,7 +57,7 @@ export default function PrinterStatusWidget({ printerId = 'printer1', compact = 
         routeName: 'Test Route',
       };
       
-      await printerService.printBookingTicket(printerId, testTicketData);
+      await printerService.printBookingTicket(testTicketData);
     } catch (err) {
       setError(`Failed to print test ticket: ${err}`);
     } finally {

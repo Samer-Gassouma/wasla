@@ -88,8 +88,9 @@ export async function listDayPasses() {
   return request<{ data: any[] }>(API.queue, "/api/v1/day-passes");
 }
 
-export async function listQueueSummaries() {
-  return request<{ data: Array<{ destinationId: string; destinationName: string; totalVehicles: number; totalSeats: number; availableSeats: number; basePrice: number }> }>(API.queue, "/api/v1/queue-summaries");
+export async function listQueueSummaries(station?: string) {
+  const url = station ? `/api/v1/queue-summaries?station=${encodeURIComponent(station)}` : "/api/v1/queue-summaries";
+  return request<{ data: Array<{ destinationId: string; destinationName: string; totalVehicles: number; totalSeats: number; availableSeats: number; basePrice: number }> }>(API.queue, url);
 }
 
 export async function listRouteSummaries() {
@@ -237,4 +238,21 @@ export async function healthBooking() {
 }
 export async function healthWS() {
   return fetch(`${API.ws.replace('ws', 'http')}/health`).then((r) => ({ ok: r.ok }));
+}
+
+// Ghost booking functions
+export async function createGhostBooking(destinationId: string, seats: number) {
+  return request<{ data: any }>(API.booking, "/api/v1/bookings/ghost", "POST", {
+    destinationId,
+    seats
+  });
+}
+
+export async function getGhostBookingCount(destinationId: string) {
+  return request<{ data: { count: number } }>(API.booking, `/api/v1/bookings/ghost/count?destination_id=${encodeURIComponent(destinationId)}`);
+}
+
+// Get all destinations from routes table
+export async function getAllDestinations() {
+  return request<{ data: Array<{ id: string; name: string; basePrice: number; isActive: boolean }> }>(API.queue, "/api/v1/destinations");
 }
