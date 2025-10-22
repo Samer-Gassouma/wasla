@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove, createGhostBooking, getGhostBookingCount, getAllDestinations } from "@/api/client";
+import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove, createGhostBooking, getGhostBookingCount, getAllDestinations, getTodayTripsCountByLicensePlate } from "@/api/client";
 import { connectQueue } from "@/ws/client";
 import { printerService, TicketData } from "@/services/printerService";
 import { getTodayTripsCount } from "@/services/bookingService";
@@ -175,7 +175,7 @@ function ActionMenu({
               }`}
               title={!(entry.availableSeats && entry.availableSeats > 0) ? 'Impossible de changer de destination lorsque complet' : 'Changer de destination'}
             >
-              🚌 Changer de destination
+              Changer de destination
             </button>
             {entry.hasDayPass && (
               <button
@@ -194,11 +194,10 @@ function ActionMenu({
               onPrintExitPassAndRemove();
               setIsOpen(false);
             }}
-            disabled={!((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0)}
-            className={`w-full px-4 py-2 text-left text-sm transition-colors ${((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0) ? 'text-red-600 hover:bg-red-50' : 'text-gray-400 cursor-not-allowed'}`}
-            title={((entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats)) > 0) ? "Imprimer sortie et retirer du queue" : "Aucun siège réservé"}
+            className="w-full px-4 py-2 text-left text-sm transition-colors text-red-600 hover:bg-red-50"
+            title="Imprimer sortie et retirer du queue"
           >
-            🧾 Sortie & Retirer
+            Sortie & Retirer
           </button>
           </div>
         </div>
@@ -438,6 +437,181 @@ function ChangeDestinationModal({
   );
 }
 
+// Vehicle Trips Count Modal Component
+function VehicleTripsCountModal({
+  isOpen,
+  onClose,
+  query,
+  onQueryChange,
+  count,
+  loading,
+  error,
+  onSearch,
+  suggestions,
+  suggestionsLoading,
+  onSelectVehicle
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  query: string;
+  onQueryChange: (query: string) => void;
+  count: number | null;
+  loading: boolean;
+  error: string | null;
+  onSearch: () => void;
+  suggestions: any[];
+  suggestionsLoading: boolean;
+  onSelectVehicle: (vehicle: any) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white p-6 rounded-t-2xl">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">🚗 Nombre de Trajets</h2>
+              <p className="text-orange-100 mt-1">Recherchez le nombre de trajets d'un véhicule aujourd'hui</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-orange-200 hover:text-white text-3xl transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6">
+          {/* Search Input */}
+          <div className="mb-6">
+            <label className="block text-lg font-semibold text-gray-800 mb-3">
+              Immatriculation du véhicule
+            </label>
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Ex: 130 TUN 2221"
+                value={query}
+                onChange={(e) => onQueryChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    onSearch();
+                  }
+                }}
+                className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                autoFocus
+              />
+            </div>
+            
+            {/* Vehicle Suggestions */}
+            {query && suggestions.length > 0 && (
+              <div className="mt-3 max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white shadow-sm">
+                <div className="p-2 text-xs text-gray-500 border-b border-gray-100">
+                  Suggestions ({suggestions.length})
+                </div>
+                {suggestions.map((vehicle) => {
+                  if (!vehicle || !vehicle.licensePlate) return null;
+                  
+                  return (
+                    <div
+                      key={vehicle.id}
+                      className="p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                      onClick={() => onSelectVehicle(vehicle)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-800">{vehicle.licensePlate}</div>
+                          {vehicle.capacity && (
+                            <div className="text-sm text-gray-500">Capacité: {vehicle.capacity} sièges</div>
+                          )}
+                        </div>
+                        <div className="text-orange-500 text-sm">Cliquer pour sélectionner</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {suggestionsLoading && (
+              <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-sm text-gray-600 flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-500 mr-2"></div>
+                  Recherche de véhicules...
+                </div>
+              </div>
+            )}
+            
+            {/* Error Message */}
+            {error && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="text-sm text-red-600 flex items-center">
+                  <span className="mr-2">!</span>
+                  {error}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Search Button */}
+          <Button
+            onClick={onSearch}
+            disabled={loading || !query.trim()}
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white py-3 rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Recherche...
+              </span>
+            ) : (
+              'Rechercher'
+            )}
+          </Button>
+
+          {/* Results */}
+          {count !== null && (
+            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-xl">
+              <div className="text-center">
+                <div className="text-4xl mb-2">🚗</div>
+                <div className="text-lg font-semibold text-green-800 mb-1">
+                  Véhicule: {query}
+                </div>
+                <div className="text-2xl font-bold text-green-600 mb-2">
+                  {count} trajet{count > 1 ? 's' : ''}
+                </div>
+                <div className="text-sm text-green-600">
+                  effectué{count > 1 ? 's' : ''} aujourd'hui
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Add Vehicle Modal Component
 function AddVehicleModal({
   isOpen,
@@ -472,98 +646,123 @@ function AddVehicleModal({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Robust focus management - ensure input is always focusable
   useEffect(() => {
     if (isOpen && inputRef.current) {
       // Small delay to ensure modal is fully rendered
       setTimeout(() => {
-        inputRef.current?.focus();
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.disabled = false;
+          inputRef.current.readOnly = false;
+        }
       }, 100);
     }
   }, [isOpen]);
 
-  // Keep focus on the input if it loses focus due to async UI updates
+  // Additional effect to ensure input stays enabled
   useEffect(() => {
-    if (!isOpen) return;
-    const el = inputRef.current;
-    if (!el) return;
-    const handler = () => {
-      // Re-focus shortly after blur to avoid stealing focus while user clicks a result
-      setTimeout(() => {
-        if (document.activeElement !== el) {
-          el.focus();
-          // Move caret to end
-          const val = el.value; el.value = ''; el.value = val;
-        }
-      }, 50);
-    };
-    el.addEventListener('blur', handler);
-    return () => el.removeEventListener('blur', handler);
-  }, [isOpen]);
+    if (isOpen && inputRef.current) {
+      const input = inputRef.current;
+      input.disabled = false;
+      input.readOnly = false;
+    }
+  }, [isOpen, searchQuery, loadingSearch]);
 
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <div 
-        className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Ajouter un Vehicule à la file</h2>
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-2xl font-bold">Ajouter un Véhicule</h2>
+              <p className="text-blue-100 mt-1">Recherchez et sélectionnez un véhicule pour l'ajouter à la file</p>
+            </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl"
+              className="text-blue-200 hover:text-white text-3xl transition-colors"
             >
               ×
             </button>
           </div>
+        </div>
 
-          {/* Search Input */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Rechercher des Vehicules par immatriculation&nbsp;:
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+          {/* Search Section */}
+          <div className="mb-6">
+            <label className="block text-lg font-semibold text-gray-800 mb-3">
+              Rechercher par immatriculation
             </label>
-            <input
-              ref={inputRef}
-              type="text"
-              placeholder="Saisissez l'immatriculation..."
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
+            <div className="relative">
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Tapez l'immatriculation du véhicule..."
+                value={searchQuery}
+                onChange={(e) => {
+                  // Ensure input stays enabled
+                  e.target.disabled = false;
+                  e.target.readOnly = false;
+                  onSearchChange(e.target.value);
+                }}
+                className="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                autoFocus
+                disabled={false}
+                readOnly={false}
+              />
+              {loadingSearch && (
+                <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                </div>
+              )}
+            </div>
             
-              {/* Erreur de recherche */}
+            {/* Search Error */}
             {searchError && (
-              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
-                <div className="text-sm text-red-600">{searchError}</div>
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <div className="text-sm text-red-600 flex items-center">
+                  <span className="mr-2">!</span>
+                  {searchError}
+                </div>
               </div>
             )}
           </div>
 
-          {/* Résultats de recherche */}
+          {/* Search Results */}
           {searchQuery && (
-            <div className="mb-4">
-              <div className="text-sm font-medium text-gray-700 mb-2">
-                Résultats de recherche ({searchResults.length})
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Résultats ({searchResults.length})
+                </h3>
+                {searchResults.length > 0 && (
+                  <span className="text-sm text-gray-500">Cliquez sur un véhicule pour le sélectionner</span>
+                )}
               </div>
-              <div className="border border-gray-200 rounded-md">
-                {loadingSearch ? (
-                  <div className="p-4 text-center text-gray-500">
-                    Recherche de Vehicules…
-                  </div>
-                ) : searchResults.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">
-                    <div className="mb-2">🔍</div>
-                    <div>Aucun Vehicule ne correspond à "{searchQuery}"</div>
-                    <div className="text-xs mt-1">Essayez une autre immatriculation ou vérifiez l'orthographe</div>
-                  </div>
-                ) : (
-                  searchResults.map((vehicle) => {
+              
+              {loadingSearch ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                  <div className="text-gray-500 text-lg">Recherche en cours...</div>
+                </div>
+              ) : searchResults.length === 0 ? (
+                <div className="text-center py-12 bg-gray-50 rounded-xl">
+                  <div className="text-6xl mb-4">?</div>
+                  <div className="text-xl font-medium text-gray-600 mb-2">Aucun véhicule trouvé</div>
+                  <div className="text-gray-500">Vérifiez l'orthographe de l'immatriculation</div>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {searchResults.map((vehicle) => {
                     // Safety check for vehicle data
                     if (!vehicle || !vehicle.id || !vehicle.licensePlate) {
                       return null;
@@ -571,125 +770,124 @@ function AddVehicleModal({
                     
                     // Check if vehicle is already in queue
                     const queuedEntry = queue.find(entry => entry.vehicleId === vehicle.id);
-                    const isAvailable = vehicle.isActive && vehicle.isAvailable;
                     
                     return (
-                      <button
+                      <div
                         key={vehicle.id}
+                        className={`p-4 rounded-xl border-2 transition-all duration-200 cursor-pointer ${
+                          queuedEntry 
+                            ? 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-60' 
+                            : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-md'
+                        }`}
                         onClick={() => !queuedEntry && onSelectVehicle(vehicle)}
-                        disabled={!!queuedEntry}
-                        className={`w-full p-3 text-left hover:bg-gray-50 transition-colors ${
-                          queuedEntry ? 'bg-gray-100 cursor-not-allowed opacity-60' : ''
-                        } ${isAvailable ? 'border-l-4 border-l-green-400' : 'border-l-4 border-l-red-400'}`}
                       >
-                        <div className="flex justify-between items-center">
+                        <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <div className="font-semibold">{vehicle.licensePlate}</div>
-                              {isAvailable && (
-                                <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-full">
-                                  Disponible
+                            <div className="flex items-center space-x-3 mb-2">
+                              <div className="text-xl font-bold text-gray-800">{vehicle.licensePlate}</div>
+                              <div className="flex space-x-2">
+                                <span className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded-full font-medium">
+                                  {vehicle.capacity} sièges
                                 </span>
-                              )}
-                              {!vehicle.isActive && (
-                                <span className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-full">
-                                  Inactif
-                                </span>
-                              )}
-                              {vehicle.isActive && !vehicle.isAvailable && (
-                                <span className="px-2 py-1 text-xs bg-yellow-100 text-yellow-700 rounded-full">
-                                  Indisponible
-                                </span>
-                              )}
+                                {vehicle.isActive && (
+                                  <span className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded-full font-medium">
+                                    Actif
+                                  </span>
+                                )}
+                                {vehicle.isAvailable && (
+                                  <span className="px-3 py-1 text-sm bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                                    Disponible
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <div className="text-sm text-gray-500 mt-1">
-                              Capacité&nbsp;: {vehicle.capacity} sièges
-                            </div>
-                            {queuedEntry && (
-                              <div className="text-sm text-red-600 font-medium mt-1">
-                                ⚠️ Existe déjà à la position {queuedEntry.queuePosition} dans l'itinéraire {currentRoute?.destinationName || 'Itinéraire actuel'}
+                            
+                            {queuedEntry ? (
+                              <div className="text-sm text-red-600 font-medium flex items-center">
+                                <span className="mr-2">!</span>
+                                Déjà en file à la position {queuedEntry.queuePosition} pour {currentRoute?.destinationName || 'cette destination'}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-500">
+                                Cliquez pour sélectionner ce véhicule
                               </div>
                             )}
                           </div>
-                          <div className="text-right">
-                            <div className={`text-sm font-medium ${
-                              vehicle.isActive ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {vehicle.isActive ? '✓ Actif' : '✗ Inactif'}
+                          
+                          {!queuedEntry && (
+                            <div className="text-blue-500 text-2xl">
+                              &gt;
                             </div>
-                            <div className={`text-xs ${
-                              vehicle.isAvailable ? 'text-green-500' : 'text-red-500'
-                            }`}>
-                              {vehicle.isAvailable ? '✓ Disponible' : '✗ Indisponible'}
-                            </div>
-                          </div>
+                          )}
                         </div>
-                      </button>
+                      </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {/* Selected Vehicle Info */}
           {selectedVehicle && (
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <div className="text-sm text-gray-600 mb-1">Vehicule sélectionné&nbsp;:</div>
-              <div className="font-semibold">{selectedVehicle.licensePlate}</div>
-              <div className="text-sm text-gray-500">Capacité&nbsp;: {selectedVehicle.capacity} sièges</div>
+            <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+              <div className="flex items-center space-x-3">
+                <div className="text-2xl">🚗</div>
+                <div>
+                  <div className="text-sm text-blue-600 font-medium mb-1">Véhicule sélectionné</div>
+                  <div className="text-xl font-bold text-gray-800">{selectedVehicle.licensePlate}</div>
+                  <div className="text-sm text-gray-600">Capacité: {selectedVehicle.capacity} sièges</div>
+                </div>
+              </div>
             </div>
           )}
 
           {/* Authorized Stations */}
           {selectedVehicle && (
-            <div className="mb-4">
-              <div className="text-sm font-medium text-gray-700 mb-2">Sélectionner la destination&nbsp;:</div>
-              <div className="border border-gray-200 rounded-md">
-                {loadingStations ? (
-                  <div className="p-4 text-center text-gray-500">
-                    Chargement des stations autorisées…
-                  </div>
-                ) : authorizedStations.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">
-                    Aucune station autorisée pour ce Vehicule.
-                  </div>
-                ) : (
-                  authorizedStations.map((station) => (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Choisir la destination</h3>
+              
+              {loadingStations ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                  <div className="text-gray-500">Chargement des destinations...</div>
+                </div>
+              ) : authorizedStations.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 rounded-xl">
+                  <div className="text-4xl mb-3">X</div>
+                  <div className="text-gray-600">Aucune destination autorisée pour ce véhicule</div>
+                </div>
+              ) : (
+                <div className="grid gap-3">
+                  {authorizedStations.map((station) => (
                     <button
                       key={station.id}
                       onClick={() => onConfirmAdd(station)}
-                      className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      className="p-4 text-left bg-white border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all duration-200"
                     >
                       <div className="flex justify-between items-center">
                         <div>
-                          <div className="font-semibold">{station.stationName}</div>
-                          <div className="text-sm text-gray-500">
-                            Priorité&nbsp;: {station.priority}
-                            {station.isDefault && <span className="ml-2 text-blue-600 font-medium">(Par défaut)</span>}
+                          <div className="text-lg font-semibold text-gray-800">{station.stationName}</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Priorité: {station.priority}
+                            {station.isDefault && (
+                              <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full font-medium">
+                                Par défaut
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm text-gray-500">ID Station</div>
-                          <div className="text-xs text-gray-400">{station.stationId}</div>
+                          <div className="text-sm text-gray-500">ID: {station.stationId}</div>
+                          <div className="text-blue-500 text-xl">&gt;</div>
                         </div>
                       </div>
                     </button>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -747,15 +945,16 @@ function SortableQueueItem({
       ref={setNodeRef}
       style={style}
       onClick={onSelectForBooking}
-      className={`p-4 transition-all duration-200 cursor-pointer ${
-        index === 0 ? 'border-l-4 border-l-blue-500' : ''
-      } ${isSelectedForBooking ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md' : ''} ${isDragging ? 'shadow-lg scale-105' : ''} ${
-        entry.status === 'READY' ? 'bg-green-50 hover:bg-green-100' : entry.status === 'LOADING' ? 'bg-yellow-50 hover:bg-yellow-100' : 'bg-white hover:bg-gray-50'
+      className={`p-4 transition-all duration-200 cursor-pointer border-l-4 ${
+        index === 0 ? 'border-l-blue-500 bg-blue-50' : 'border-l-transparent'
+      } ${isSelectedForBooking ? 'bg-yellow-50 border-2 border-yellow-400 shadow-md' : 'hover:bg-gray-50'} ${
+        isDragging ? 'shadow-lg scale-105 z-10' : ''
       }`}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm transition-colors duration-200 ${
+        <div className="flex items-center space-x-3">
+          {/* Position Badge */}
+          <div className={`flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm transition-colors duration-200 ${
             index === 0 
               ? 'bg-blue-500 text-white shadow-md' 
               : index === 1 
@@ -764,92 +963,100 @@ function SortableQueueItem({
           }`}>
             {actualPosition}
           </div>
-          <div className="flex-1">
-            <div className="font-bold text-lg text-gray-900 flex items-center space-x-2">
-              <span>{entry.licensePlate}</span>
+          
+          {/* Vehicle Info */}
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-base text-gray-900 flex items-center space-x-2">
+              <span className="truncate">{entry.licensePlate}</span>
               <DayPassBadge entry={entry} />
             </div>
-            <div className="text-sm text-gray-500 flex items-center">
-              <span className="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
-              Position {actualPosition} dans la file
+            <div className="text-xs text-gray-500">
+              {index === 0 ? '🚀 Prochain départ' : `Position ${actualPosition}`}
             </div>
           </div>
         </div>
-        <div className="flex items-center space-x-3">
-          {/* Arrow Controls */}
-          <div className="flex flex-col space-y-1">
-            <button
-              onClick={onMoveUp}
-              disabled={index === 0}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold transition-colors ${
-                index === 0 
-                  ? 'text-gray-300 cursor-not-allowed' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 cursor-pointer'
-              }`}
-              title="Monter dans la file"
-            >
-              ↑
-            </button>
-            <button
-              onClick={onMoveDown}
-              disabled={index === totalItems - 1}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold transition-colors ${
-                index === totalItems - 1 
-                  ? 'text-gray-300 cursor-not-allowed' 
-                  : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50 cursor-pointer'
-              }`}
-              title="Descendre dans la file"
-            >
-              ↓
-            </button>
-          </div>
-          
-          {/* Drag Handle */}
-          <div 
-            {...attributes} 
-            {...listeners}
-            className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded"
-            title="Glisser pour réorganiser"
-          >
-            <div className="w-4 h-4 flex flex-col justify-center items-center">
-              <div className="w-3 h-0.5 bg-gray-400 mb-0.5"></div>
-              <div className="w-3 h-0.5 bg-gray-400 mb-0.5"></div>
-              <div className="w-3 h-0.5 bg-gray-400"></div>
-            </div>
-          </div>
-
+        
+        <div className="flex items-center space-x-2">
           {/* Seats Info */}
           <div className="text-right">
             <div className="flex items-center space-x-1">
-              <span className="text-2xl font-bold text-green-600">{entry.availableSeats}</span>
+              <span className="text-lg font-bold text-green-600">{entry.availableSeats}</span>
               <span className="text-xs text-gray-400">/</span>
               <span className="text-sm text-gray-500">{entry.totalSeats}</span>
             </div>
-            <div className="text-xs text-gray-500 uppercase tracking-wide">
-            {entry.bookedSeats && entry.bookedSeats > 0 ? `${entry.bookedSeats} réservés` : 'disponible'}
+            <div className="text-xs text-gray-500">
+              {entry.bookedSeats && entry.bookedSeats > 0 ? `${entry.bookedSeats} réservés` : 'disponible'}
             </div>
           </div>
 
-          {/* Action Menu */}
-          <ActionMenu
-            entry={entry}
-            onRemove={onRemove}
-            onTransferSeats={onTransferSeats}
-            onChangeDestination={onChangeDestination}
-            onReprintDayPass={onReprintDayPass}
-            onPrintExitPassAndRemove={onPrintExitPassAndRemove}
-          />
+          {/* Controls */}
+          <div className="flex items-center space-x-1">
+            {/* Arrow Controls */}
+            <div className="flex flex-col space-y-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveUp();
+                }}
+                disabled={index === 0}
+                className={`w-5 h-5 flex items-center justify-center rounded text-xs font-bold transition-colors ${
+                  index === 0 
+                    ? 'text-gray-300 cursor-not-allowed' 
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                }`}
+                title="Monter dans la file"
+              >
+                ^
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveDown();
+                }}
+                disabled={index === totalItems - 1}
+                className={`w-5 h-5 flex items-center justify-center rounded text-xs font-bold transition-colors ${
+                  index === totalItems - 1 
+                    ? 'text-gray-300 cursor-not-allowed' 
+                    : 'text-gray-600 hover:text-blue-600 hover:bg-blue-50'
+                }`}
+                title="Descendre dans la file"
+              >
+                v
+              </button>
+            </div>
+            
+            {/* Drag Handle */}
+            <div 
+              {...attributes} 
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing p-1 hover:bg-gray-100 rounded"
+              title="Glisser pour réorganiser"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-3 h-3 flex flex-col justify-center items-center">
+                <div className="w-2 h-0.5 bg-gray-400 mb-0.5"></div>
+                <div className="w-2 h-0.5 bg-gray-400 mb-0.5"></div>
+                <div className="w-2 h-0.5 bg-gray-400"></div>
+              </div>
+            </div>
+
+            {/* Action Menu */}
+            <ActionMenu
+              entry={entry}
+              onRemove={onRemove}
+              onTransferSeats={onTransferSeats}
+              onChangeDestination={onChangeDestination}
+              onReprintDayPass={onReprintDayPass}
+              onPrintExitPassAndRemove={onPrintExitPassAndRemove}
+            />
+          </div>
         </div>
       </div>
-      {index === 0 && (
-        <div className="mt-2 text-xs text-blue-600 font-medium">
-          🚀 Prochain
-        </div>
-      )}
+      
       {isSelectedForBooking && (
         <div className="mt-2 text-xs text-yellow-600 font-medium flex items-center">
           <span className="mr-1">🎫</span>
-          Sélectionné pour réservation (cliquer pour désélectionner)
+          Sélectionné pour réservation
         </div>
       )}
     </div>
@@ -860,6 +1067,7 @@ export default function MainPage() {
   const { selectedStation, setShowStationSelection } = useStation();
   
   const [summaries, setSummaries] = useState<Summary[]>([]);
+  const [allDestinations, setAllDestinations] = useState<Array<{ id: string; name: string; basePrice: number; isActive: boolean }>>([]);
   const [selected, setSelected] = useState<Summary | null>(null);
   const [queue, setQueue] = useState<QueueEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -900,7 +1108,18 @@ export default function MainPage() {
   const [ghostBookingCounts, setGhostBookingCounts] = useState<Record<string, number>>({});
   const [isGhostMode, setIsGhostMode] = useState(false);
   const [selectedGhostDestination, setSelectedGhostDestination] = useState<Summary | null>(null);
-  const [allDestinations, setAllDestinations] = useState<Array<{ id: string; name: string; basePrice: number; isActive: boolean }>>([]);
+  
+  // Vehicle trips count state
+  const [showVehicleTripsModal, setShowVehicleTripsModal] = useState(false);
+  const [vehicleTripsQuery, setVehicleTripsQuery] = useState('');
+  const [vehicleTripsCount, setVehicleTripsCount] = useState<number | null>(null);
+  const [vehicleTripsLoading, setVehicleTripsLoading] = useState(false);
+  const [vehicleTripsError, setVehicleTripsError] = useState<string | null>(null);
+  
+  // Vehicle suggestions for trips count modal
+  const [vehicleTripsSuggestions, setVehicleTripsSuggestions] = useState<any[]>([]);
+  const [vehicleTripsSuggestionsLoading, setVehicleTripsSuggestionsLoading] = useState(false);
+  const vehicleTripsSearchDebounceRef = useRef<number | null>(null);
   
   // Load ghost booking counts for all destinations
   const loadGhostBookingCounts = async () => {
@@ -993,10 +1212,32 @@ export default function MainPage() {
         }
       }
       
-      // Always refresh queue summaries with station filtering
+      // Always refresh queue summaries with station filtering and all destinations
       const stationId = selectedStation?.id || 'all';
-      const summariesResponse = await listQueueSummaries(stationId);
-      setSummaries(summariesResponse.data || []);
+      const [destinationsResponse, summariesResponse] = await Promise.all([
+        getAllDestinations(),
+        listQueueSummaries(stationId)
+      ]);
+      
+      const allDests = destinationsResponse.data || [];
+      const queueSummaries = summariesResponse.data || [];
+      
+      setAllDestinations(allDests);
+      
+      // Merge all destinations with queue data
+      const mergedSummaries = allDests.map(dest => {
+        const queueData = queueSummaries.find(q => q.destinationId === dest.id);
+        return {
+          destinationId: dest.id,
+          destinationName: dest.name,
+          totalVehicles: queueData?.totalVehicles || 0,
+          totalSeats: queueData?.totalSeats || 0,
+          availableSeats: queueData?.availableSeats || 0,
+          basePrice: dest.basePrice
+        };
+      });
+      
+      setSummaries(mergedSummaries);
       
       console.log('Queue and summaries refreshed successfully');
     } catch (refreshError) {
@@ -1096,9 +1337,11 @@ export default function MainPage() {
           e.preventDefault();
           const s = summaries[idx];
           setSelected(s);
+          setQueue([]);
           setSelectedVehicleForBooking(null);
           setSelectedSeats([]);
           saveSelectedVehicle(null);
+          setLoading(false);
         }
         return;
       }
@@ -1117,9 +1360,12 @@ export default function MainPage() {
         return;
       }
 
-      // Space: confirm booking
+      // Space: confirm booking (works for both normal and ghost mode)
       if (e.code === 'Space' || e.key === ' ') {
-        if (selected && selectedSeats.length > 0) {
+        if (isGhostMode && selectedGhostDestination && selectedSeats.length > 0) {
+          e.preventDefault();
+          handleGhostBooking();
+        } else if (selected && selectedSeats.length > 0) {
           e.preventDefault();
           handleConfirmBooking();
         }
@@ -1129,7 +1375,7 @@ export default function MainPage() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [addVehicleModalOpen, summaries, selected, selectedVehicleForBooking, selectedSeats]);
+  }, [addVehicleModalOpen, summaries, selected, selectedVehicleForBooking, selectedSeats, isGhostMode, selectedGhostDestination]);
 
   // Save selected vehicle to localStorage
   const saveSelectedVehicle = (vehicle: QueueEntry | null) => {
@@ -1263,7 +1509,46 @@ export default function MainPage() {
     try {
       await deleteQueueEntry(selected.destinationId, entryId);
       
-      // Automatically refresh queue and summaries
+      // Immediately update the local queue state
+      const updatedQueue = queue.filter(item => item.id !== entryId);
+      setQueue(updatedQueue);
+      
+      // If queue is now empty, update the selected summary to show empty state
+      if (updatedQueue.length === 0 && selected) {
+        const updatedSelected = {
+          ...selected,
+          totalVehicles: 0,
+          totalSeats: 0,
+          availableSeats: 0
+        };
+        setSelected(updatedSelected);
+        
+        // Also update the summaries array
+        setSummaries(prevSummaries => 
+          prevSummaries.map(summary => 
+            summary.destinationId === selected.destinationId 
+              ? updatedSelected 
+              : summary
+          )
+        );
+      }
+      
+      // Check if queue is now empty and show appropriate notification
+      if (updatedQueue.length === 0) {
+        addNotification({
+          type: 'success',
+          title: 'Véhicule retiré',
+          message: `Le véhicule ${entry.licensePlate} a été retiré. La file ${selected.destinationName} est maintenant vide.`
+        });
+      } else {
+        addNotification({
+          type: 'success',
+          title: 'Véhicule retiré',
+          message: `Le véhicule ${entry.licensePlate} a été retiré de la file ${selected.destinationName}.`
+        });
+      }
+      
+      // Then refresh summaries in the background
       await refreshQueueAndSummaries();
       
       console.log('Successfully removed from queue:', entryId);
@@ -1292,14 +1577,13 @@ export default function MainPage() {
     if (!entry) return;
 
     const bookedSeats = entry.bookedSeats ?? (entry.totalSeats - entry.availableSeats);
-    if (bookedSeats <= 0) {
-      alert("Aucun siège réservé à imprimer pour ce Vehicule.");
-      return;
-    }
+    
+    // Allow printing exit pass even for empty vehicles (bookedSeats = 0)
+    // Empty vehicles will be charged service fees instead of base price
 
     try {
       const printerId = "default"; // use configured/default printer id
-      const total = bookedSeats * (selected.basePrice ?? 0);
+      const total = bookedSeats > 0 ? bookedSeats * (selected.basePrice ?? 0) : 0.15 * entry.totalSeats;
       await printExitPassAndRemove(printerId, {
         queueEntryId: entry.id,
         licensePlate: entry.licensePlate,
@@ -1315,8 +1599,47 @@ export default function MainPage() {
         staffLastName: staffInfo?.lastName,
       });
 
+      // Immediately update the local queue state
+      const updatedQueue = queue.filter(item => item.id !== entryId);
+      setQueue(updatedQueue);
+      
+      // If queue is now empty, update the selected summary to show empty state
+      if (updatedQueue.length === 0 && selected) {
+        const updatedSelected = {
+          ...selected,
+          totalVehicles: 0,
+          totalSeats: 0,
+          availableSeats: 0
+        };
+        setSelected(updatedSelected);
+        
+        // Also update the summaries array
+        setSummaries(prevSummaries => 
+          prevSummaries.map(summary => 
+            summary.destinationId === selected.destinationId 
+              ? updatedSelected 
+              : summary
+          )
+        );
+      }
+      
+      // Check if queue is now empty after removal
+      if (updatedQueue.length === 0) {
+        addNotification({ 
+          type: 'success', 
+          title: 'Autorisation sortie', 
+          message: `Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré. La file ${selected.destinationName} est maintenant vide.` 
+        });
+      } else {
+        addNotification({ 
+          type: 'success', 
+          title: 'Autorisation sortie', 
+          message: `Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré de la file.` 
+        });
+      }
+      
+      // Then refresh summaries in the background
       await refreshQueueAndSummaries();
-      addNotification({ type: 'success', title: 'Autorisation sortie', message: `Imprimé. Total ${total.toFixed(2)} TND. Vehicule retiré de la file.` });
     } catch (e) {
       console.error(e);
       alert("Échec de l'impression d'autorisation de sortie.");
@@ -1442,8 +1765,8 @@ export default function MainPage() {
       const exitPassTicketData: TicketData = {
         licensePlate: trip.licensePlate,
         destinationName: trip.destinationName,
-        seatNumber: 0, // Not applicable for exit pass
-        totalAmount: trip.vehicleCapacity && trip.basePrice ? trip.vehicleCapacity * trip.basePrice : 0,
+        seatNumber: trip.seatsBooked || 0, // Use seats booked for pricing calculation
+        totalAmount: trip.seatsBooked && trip.basePrice ? trip.seatsBooked * trip.basePrice : 0,
         createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Staff',
         createdAt: trip.startTime ? new Date(trip.startTime).toISOString() : new Date().toISOString(),
         stationName: 'Station',
@@ -1496,9 +1819,11 @@ export default function MainPage() {
 
   // Add vehicle handlers
   const handleVehicleSearch = async (query: string) => {
-    if (query.length < 2) {
+    // Always allow search, even with empty or single character queries
+    if (query.length === 0) {
       setSearchResults([]);
       setSearchError(null);
+      setLoadingSearch(false);
       return;
     }
     
@@ -1897,6 +2222,7 @@ export default function MainPage() {
             destinationName: selectedGhostDestination.destinationName,
             seatNumber: ghostBooking.seatNumber || 1,
             totalAmount: ghostBooking.totalAmount || 0,
+            basePrice: selectedGhostDestination.basePrice || 0, // Include base price for pricing breakdown
             createdBy: ghostBooking.createdByName || 'Agent',
             createdAt: ghostBooking.createdAt || new Date().toISOString(),
             stationName: 'Station',
@@ -1910,7 +2236,8 @@ export default function MainPage() {
             licensePlate: 'N/A',
             destinationName: ticketData.destinationName,
             seatNumber: ticketData.seatNumber,
-            totalAmount: ticketData.totalAmount,
+            totalAmount: ticketData.totalAmount, // Restore correct total amount
+            basePrice: ticketData.basePrice, // Include base price for talon too
             createdBy: ticketData.createdBy,
             createdAt: ticketData.createdAt,
             stationName: '',
@@ -1948,18 +2275,144 @@ export default function MainPage() {
     }
   };
 
-  useEffect(() => {
-    const stationId = selectedStation?.id || 'all';
-    listQueueSummaries(stationId).then((r) => {
-      const data = (r as any)?.data || [];
-      setSummaries(data);
-      // Auto-select first destination on app load to bring data/WS online immediately
-      if (!selected && data.length > 0) {
-        setSelected(data[0]);
+  const handleGetVehicleTripsCount = async () => {
+    if (!vehicleTripsQuery.trim()) {
+      setVehicleTripsError('Veuillez saisir une immatriculation');
+      return;
+    }
+    
+    setVehicleTripsLoading(true);
+    setVehicleTripsError(null);
+    setVehicleTripsCount(null);
+    
+    try {
+      const response = await getTodayTripsCountByLicensePlate(vehicleTripsQuery.trim());
+      setVehicleTripsCount(response.data.count);
+      
+      addNotification({
+        type: 'success',
+        title: 'Nombre de trajets trouvé',
+        message: `Le véhicule ${vehicleTripsQuery.trim()} a effectué ${response.data.count} trajet${response.data.count > 1 ? 's' : ''} aujourd'hui`
+      });
+    } catch (error) {
+      console.error('Failed to get vehicle trips count:', error);
+      setVehicleTripsError('Échec de la recherche. Vérifiez l\'immatriculation.');
+      addNotification({
+        type: 'error',
+        title: 'Erreur de recherche',
+        message: 'Impossible de récupérer le nombre de trajets pour cette immatriculation'
+      });
+    } finally {
+      setVehicleTripsLoading(false);
+    }
+  };
+
+  const handleCloseVehicleTripsModal = () => {
+    setShowVehicleTripsModal(false);
+    setVehicleTripsQuery('');
+    setVehicleTripsCount(null);
+    setVehicleTripsError(null);
+    setVehicleTripsSuggestions([]);
+  };
+
+  const handleSelectVehicleForTrips = (vehicle: any) => {
+    if (!vehicle || !vehicle.licensePlate) {
+      return;
+    }
+    setVehicleTripsQuery(vehicle.licensePlate);
+    setVehicleTripsSuggestions([]); // Clear suggestions after selection
+  };
+
+  // Vehicle search for trips count modal suggestions
+  const handleVehicleTripsSearch = async (query: string) => {
+    if (query.length === 0) {
+      setVehicleTripsSuggestions([]);
+      setVehicleTripsSuggestionsLoading(false);
+      return;
+    }
+    
+    const seq = ++latestSearchSeqRef.current;
+    setVehicleTripsSuggestionsLoading(true);
+    try {
+      const response = await searchVehicles(query);
+      if (seq !== latestSearchSeqRef.current) {
+        return;
       }
-    }).catch((err) => {
-      console.error('Failed to load queue summaries:', err);
-    });
+      if (response && (response as any).data && Array.isArray((response as any).data)) {
+        setVehicleTripsSuggestions((response as any).data);
+      } else {
+        setVehicleTripsSuggestions([]);
+      }
+    } catch (error) {
+      console.error('Vehicle search error:', error);
+      setVehicleTripsSuggestions([]);
+    } finally {
+      if (seq === latestSearchSeqRef.current) {
+        setVehicleTripsSuggestionsLoading(false);
+      }
+    }
+  };
+
+  const handleVehicleTripsInputChange = (query: string) => {
+    setVehicleTripsQuery(query);
+    setVehicleTripsCount(null); // Clear previous count when typing
+    setVehicleTripsError(null); // Clear previous error
+    
+    if (vehicleTripsSearchDebounceRef.current) {
+      window.clearTimeout(vehicleTripsSearchDebounceRef.current);
+    }
+    vehicleTripsSearchDebounceRef.current = window.setTimeout(() => {
+      handleVehicleTripsSearch(query);
+    }, 300);
+  };
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const stationId = selectedStation?.id || 'all';
+        
+        // Load all destinations and queue summaries in parallel
+        const [destinationsResponse, summariesResponse] = await Promise.all([
+          getAllDestinations(),
+          listQueueSummaries(stationId)
+        ]);
+        
+        const allDests = destinationsResponse.data || [];
+        const queueSummaries = summariesResponse.data || [];
+        
+        // Filter destinations based on selected station
+        const stationDestinations = selectedStation?.destinations || ['JEMMAL', 'MOKNIN', 'TEBOULBA', 'KSAR HLEL'];
+        const filteredDests = selectedStation?.id === 'all' 
+          ? allDests 
+          : allDests.filter(dest => stationDestinations.includes(dest.name));
+        
+        setAllDestinations(filteredDests);
+        
+        // Merge filtered destinations with queue data
+        const mergedSummaries = filteredDests.map(dest => {
+          const queueData = queueSummaries.find(q => q.destinationId === dest.id);
+          return {
+            destinationId: dest.id,
+            destinationName: dest.name,
+            totalVehicles: queueData?.totalVehicles || 0,
+            totalSeats: queueData?.totalSeats || 0,
+            availableSeats: queueData?.availableSeats || 0,
+            basePrice: dest.basePrice
+          };
+        });
+        
+        setSummaries(mergedSummaries);
+        
+        // Auto-select first destination on app load to bring data/WS online immediately
+        if (!selected && mergedSummaries.length > 0) {
+          setSelected(mergedSummaries[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load destinations and summaries:', err);
+      }
+    };
+    
+    loadData();
   }, [selectedStation]);
 
   // Load ghost booking counts when summaries change
@@ -2105,10 +2558,33 @@ export default function MainPage() {
               // Handle queue entry removal - check if destination should be removed
               if (msg.data?.queueEmpty === true) {
                 console.log('Queue is now empty for destination:', msg.data.destinationId);
-                // Refresh summaries to remove empty destination
+                // Refresh summaries to show empty destination (not remove it)
                 const stationId = selectedStation?.id || 'all';
-                listQueueSummaries(stationId).then((summariesResponse) => {
-                  setSummaries(summariesResponse.data || []);
+                
+                // Load all destinations and queue summaries to maintain empty destinations
+                Promise.all([
+                  getAllDestinations(),
+                  listQueueSummaries(stationId)
+                ]).then(([destinationsResponse, summariesResponse]) => {
+                  const allDests = destinationsResponse.data || [];
+                  const queueSummaries = summariesResponse.data || [];
+                  
+                  setAllDestinations(allDests);
+                  
+                  // Merge all destinations with queue data
+                  const mergedSummaries = allDests.map(dest => {
+                    const queueData = queueSummaries.find(q => q.destinationId === dest.id);
+                    return {
+                      destinationId: dest.id,
+                      destinationName: dest.name,
+                      totalVehicles: queueData?.totalVehicles || 0,
+                      totalSeats: queueData?.totalSeats || 0,
+                      availableSeats: queueData?.availableSeats || 0,
+                      basePrice: dest.basePrice
+                    };
+                  });
+                  
+                  setSummaries(mergedSummaries);
                   
                   // If the current destination is now empty, clear the queue
                   if (selected && selected.destinationId === msg.data.destinationId) {
@@ -2212,9 +2688,9 @@ export default function MainPage() {
   }, [selected?.destinationId]); // Only depend on destinationId, not the entire selected object
 
   return (
-    <div className="w-full h-screen bg-gray-50 overflow-hidden">
+    <div className="w-full h-screen bg-gray-50 overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 flex justify-between items-center w-full">
+      <div className="bg-white border-b px-6 py-4 flex justify-between items-center w-full flex-shrink-0">
         <div className="flex items-center gap-3">
           <img src="icons/logo.png" alt="Wasla" className="h-8 w-8 object-contain -translate-y-0.5" />
           <div className="w-1 h-6 bg-blue-500 -skew-x-12 opacity-60 rounded-full"></div>
@@ -2272,349 +2748,403 @@ export default function MainPage() {
         </div>
       </div>
 
-      {/* Main Content - Scrollable */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Ghost Mode or Station Cards */}
-        {isGhostMode ? (
-          <div className="py-6 w-full">
-            <div className="px-6 mb-4">
-              <h2 className="text-xl font-semibold text-purple-700 mb-2">👻 Mode Fantôme - Sélectionner une destination</h2>
-              <p className="text-gray-600">Choisissez une destination pour créer une réservation fantôme</p>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-12 gap-4 px-6">
-              {allDestinations.map((dest) => (
-                <Card
-                  key={dest.id}
-                  className={`p-4 text-center cursor-pointer transition-colors relative ${
-                    selectedGhostDestination?.destinationId === dest.id 
-                      ? "bg-purple-50 border-purple-500 border-2" 
-                      : "hover:bg-purple-50"
-                  }`}
-                  onClick={() => handleGhostDestinationSelect(dest)}
-                >
-                  {/* Ghost booking count badge */}
-                  {ghostBookingCounts[dest.id] > 0 && (
-                    <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                      {ghostBookingCounts[dest.id]}
-                    </div>
-                  )}
-                  <h2 className="text-lg font-semibold">{dest.name}</h2>
-                  <p className="text-2xl font-bold text-purple-600 mt-2">{dest.basePrice.toFixed(2)}</p>
-                  <span className="text-sm text-gray-500">DT</span>
-                </Card>
-              ))}
-            </div>
-            
-            {/* Ghost Booking Section */}
-            {selectedGhostDestination && (
-              <div className="px-6 py-6">
-                <div className="bg-purple-50 border border-purple-200 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-purple-800 mb-4">
-                    👻 Réservation Fantôme - {selectedGhostDestination.destinationName}
-                  </h3>
-                  
-                  {/* Seat Selection */}
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Nombre de sièges</label>
-                    <div className="flex space-x-2">
-                      {[1, 2, 3, 4, 5].map((num) => (
-                        <Button
-                          key={num}
-                          variant={selectedSeats.includes(num) ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setSelectedSeats([num])}
-                          className={selectedSeats.includes(num) ? "bg-purple-600 hover:bg-purple-700" : ""}
-                        >
-                          {num}
-                        </Button>
-                      ))}
-                    </div>
+      {/* Main Content - Two Column Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar - Queue List (1/3 width) */}
+        <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+          {/* Queue Header */}
+          <div className="p-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-800">File des Véhicules</h2>
+                {selected && (
+                  <div className="text-sm text-gray-600 mt-1">
+                    Destination: <span className="font-medium text-blue-600">{selected.destinationName}</span>
                   </div>
-                  
-                  {/* Booking Button */}
-                  <Button
-                    onClick={handleGhostBooking}
-                    disabled={bookingLoading || selectedSeats.length === 0}
-                    className="w-full bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white py-3 rounded-xl shadow-lg"
-                  >
-                    {bookingLoading ? (
-                      <span className="flex items-center justify-center">
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Création...
-                      </span>
-                    ) : (
-                      `👻 Créer Réservation Fantôme (${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'})`
-                    )}
-                  </Button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                {reordering && <span className="text-blue-500 text-sm">Réorganisation…</span>}
+                {reorderSuccess && <span className="text-green-500 text-sm">Réorganisé !</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Queue Content */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                  Chargement des véhicules…
                 </div>
               </div>
-            )}
-          </div>
-        ) : (
-          <div className="py-6 w-full">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-12 gap-4 px-6">
-              {(summaries || []).map((s) => (
-                <Card
-                  key={s.destinationId}
-                  className={`p-4 text-center cursor-pointer transition-colors relative ${
-                    selected?.destinationId === s.destinationId 
-                      ? "bg-blue-50 border-blue-500 border-2" 
-                      : "hover:bg-gray-50"
-                  }`}
-                  onClick={() => {
-                    setSelected(s);
-                    // Clear selected vehicle when switching routes
-                    setSelectedVehicleForBooking(null);
-                    setSelectedSeats([]);
-                    saveSelectedVehicle(null);
-                  }}
-                >
-                  {/* Ghost booking count badge */}
-                  {ghostBookingCounts[s.destinationId] > 0 && (
-                    <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                      {ghostBookingCounts[s.destinationId]}
-                    </div>
-                  )}
-                  <h2 className="text-lg font-semibold">{s.destinationName}</h2>
-                  <p className="text-2xl font-bold text-blue-600 mt-2">{s.availableSeats}</p>
-                  <span className="text-sm text-gray-500">sièges disponibles</span>
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Global actions row (visible even without selected destination) */}
-        <div className="px-6 mb-2 flex justify-end space-x-4">
-          <Button
-            className="bg-gray-700 hover:bg-gray-800 text-white"
-            onClick={async () => {
-              setShowTrips(true);
-              setLoadingTrips(true);
-              try {
-                setTripsError(null);
-                console.log('Loading today\'s trips...');
-                const r = await listTodayTrips();
-                console.log('Trips API response:', r);
-                setTrips(Array.isArray(r.data) ? r.data : []);
-                console.log('Trips loaded:', Array.isArray(r.data) ? r.data.length : 0, 'trips');
-              } catch (error) {
-                console.error('Failed to load trips:', error);
-                setTripsError('Échec du chargement des trajets. Veuillez réessayer.');
-                setTrips([]);
-              } finally {
-                setLoadingTrips(false);
-              }
-            }}
-          >
-            Voir les trajets d'aujourd'hui
-          </Button>
-          
-          {/* Ghost Mode Button */}
-          {!isGhostMode ? (
-            <Button
-              onClick={handleEnterGhostMode}
-              className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-2 rounded-xl shadow-lg"
-            >
-              👻 Mode Fantôme
-            </Button>
-          ) : (
-            <Button
-              onClick={handleExitGhostMode}
-              className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-6 py-2 rounded-xl shadow-lg"
-            >
-              ❌ Sortir du Mode Fantôme
-            </Button>
-          )}
-        </div>
-
-        {/* Vehicle Queue */}
-        {selected && (
-          <div className="py-6 w-full">
-            <h2 className="text-xl font-semibold mb-4 px-6">
-              File {selected.destinationName} ({queue.length} Vehicules)
-            </h2>
-            <div className="px-6">
-              {loading ? (
-                <div className="text-center py-8 text-gray-500">Chargement des Vehicules…</div>
-              ) : queue.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-500 mb-4">Aucun Vehicule dans la file</div>
-                  <div className="text-xs text-gray-400 mt-2">
-                    Utilisez le bouton "Mode Fantôme" ci-dessus pour créer des réservations
+            ) : queue.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <div className="text-6xl mb-4">🚗</div>
+                  <div className="text-xl font-medium mb-2 text-gray-600">
+                    {selected ? `File ${selected.destinationName}` : 'Aucune destination sélectionnée'}
+                  </div>
+                  <div className="text-lg font-semibold mb-2 text-gray-400">Vide</div>
+                  <div className="text-sm text-gray-500 mb-4">
+                    {selected ? `Aucun véhicule dans la file pour ${selected.destinationName}` : 'Sélectionnez une destination pour voir les véhicules'}
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Utilisez le bouton "Ajouter un Véhicule" pour commencer
                   </div>
                 </div>
-              ) : (
-                <div className="w-1/3 h-[calc(100vh-320px)] overflow-y-auto bg-white rounded-xl border border-gray-200 shadow-sm mb-8">
-                  <div className="p-4 border-b border-gray-100 bg-gray-50 rounded-t-xl">
-                    <h3 className="font-semibold text-gray-700 text-sm uppercase tracking-wide">
-                      File des Vehicules 
-                      {reordering && <span className="text-blue-500 ml-2">(Réorganisation…)</span>}
-                      {reorderSuccess && <span className="text-green-500 ml-2">✓ Réorganisé !</span>}
-                    </h3>
-                        </div>
-                  <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <SortableContext items={(queue || []).map(item => item.id)} strategy={verticalListSortingStrategy}>
-                      <div className="divide-y divide-gray-100">
-                        {(queue || []).map((entry, index) => (
-                          <SortableQueueItem 
-                            key={entry.id} 
-                            entry={entry} 
-                            index={index}
-                            totalItems={(queue || []).length}
-                            onMoveUp={() => handleMoveUp(index)}
-                            onMoveDown={() => handleMoveDown(index)}
-                            onRemove={() => handleRemoveFromQueue(entry.id)}
-                            onTransferSeats={() => handleTransferSeats(entry.id)}
-                            onChangeDestination={() => handleChangeDestination(entry.id)}
-                            onSelectForBooking={() => {
-                              // Toggle selection - if already selected, unselect it
-                              if (selectedVehicleForBooking?.id === entry.id) {
-                                setSelectedVehicleForBooking(null);
-                                saveSelectedVehicle(null);
-                                setSelectedSeats([]);
-                              } else {
-                                setSelectedVehicleForBooking(entry);
-                                saveSelectedVehicle(entry);
-                                // Default to 1 seat selected when booking section opens
-                                setSelectedSeats([1]);
-                              }
-                            }}
-                            onReprintDayPass={() => handleReprintDayPass(entry.vehicleId)}
-                            onPrintExitPassAndRemove={() => handlePrintExitPassAndRemove(entry.id)}
-                            isSelectedForBooking={selectedVehicleForBooking?.id === entry.id}
-                          />
-                        ))}
-                        </div>
-                    </SortableContext>
-                  </DndContext>
-                      </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext items={(queue || []).map(item => item.id)} strategy={verticalListSortingStrategy}>
+                  <div className="divide-y divide-gray-100">
+                    {(queue || []).map((entry, index) => (
+                      <SortableQueueItem 
+                        key={entry.id} 
+                        entry={entry} 
+                        index={index}
+                        totalItems={(queue || []).length}
+                        onMoveUp={() => handleMoveUp(index)}
+                        onMoveDown={() => handleMoveDown(index)}
+                        onRemove={() => handleRemoveFromQueue(entry.id)}
+                        onTransferSeats={() => handleTransferSeats(entry.id)}
+                        onChangeDestination={() => handleChangeDestination(entry.id)}
+                        onSelectForBooking={() => {
+                          // Toggle selection - if already selected, unselect it
+                          if (selectedVehicleForBooking?.id === entry.id) {
+                            setSelectedVehicleForBooking(null);
+                            saveSelectedVehicle(null);
+                            setSelectedSeats([]);
+                          } else {
+                            setSelectedVehicleForBooking(entry);
+                            saveSelectedVehicle(entry);
+                            // Default to 1 seat selected when booking section opens
+                            setSelectedSeats([1]);
+                          }
+                        }}
+                        onReprintDayPass={() => handleReprintDayPass(entry.vehicleId)}
+                        onPrintExitPassAndRemove={() => handlePrintExitPassAndRemove(entry.id)}
+                        isSelectedForBooking={selectedVehicleForBooking?.id === entry.id}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Booking Section - bottom-aligned, simplified (also available when only destination is selected) */}
-      {selected && (
-        <div className="absolute bottom-0 right-0 w-2/3 max-h-[66vh] bg-white shadow-xl overflow-y-auto">
-          <div className="py-3 pr-3 pl-5">
-            {/* Booking Section Header */}
-            <div className="mb-4 pb-2 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">
-                Réservation pour {selected.destinationName}
-              </h3>
-              <div className="text-sm text-gray-600 mt-1">
-                {selectedVehicleForBooking ? (
-                  <>Véhicule sélectionné: <span className="font-medium text-blue-600">{selectedVehicleForBooking.licensePlate}</span></>
+        {/* Right Side - Routes and Booking (2/3 width) */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Routes Section */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {/* Routes Section */}
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className={`text-2xl font-semibold mb-2 ${isGhostMode ? 'text-purple-700' : 'text-gray-800'}`}>
+                  {isGhostMode ? 'Mode Fantôme - Destinations' : 'Destinations Disponibles'}
+                </h2>
+                <p className={`${isGhostMode ? 'text-purple-600' : 'text-gray-600'}`}>
+                  {isGhostMode ? 'Choisissez une destination pour créer une réservation fantôme' : 'Sélectionnez une destination pour voir les véhicules en file'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                {isGhostMode ? (
+                  // Ghost mode: show all destinations
+                  allDestinations.map((dest) => {
+                    const isSelected = selectedGhostDestination?.destinationId === dest.id;
+                    
+                    return (
+                      <Card
+                        key={dest.id}
+                        className={`p-4 text-center cursor-pointer transition-all duration-200 relative hover:shadow-lg ${
+                          isSelected
+                            ? "bg-purple-50 border-purple-500 border-2 shadow-lg" 
+                            : "hover:bg-purple-50 border-gray-200"
+                        }`}
+                        onClick={() => handleGhostDestinationSelect(dest)}
+                      >
+                        {/* Ghost booking count badge */}
+                        {ghostBookingCounts[dest.id] > 0 && (
+                          <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                            {ghostBookingCounts[dest.id]}
+                          </div>
+                        )}
+                        <h3 className="text-lg font-semibold text-purple-800">{dest.name}</h3>
+                        <div className="mt-3">
+                          <p className={`text-2xl font-bold ${isSelected ? 'text-purple-600' : 'text-purple-500'}`}>{dest.basePrice.toFixed(2)}</p>
+                          <span className="text-sm text-gray-500">TND</span>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {dest.isActive ? 'Actif' : 'Inactif'}
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
                 ) : (
-                  <>Aucun véhicule sélectionné - <span className="font-medium text-green-600">attribution automatique</span></>
+                  // Normal mode: show summaries
+                  (summaries || []).map((s) => {
+                    const isSelected = selected?.destinationId === s.destinationId;
+                    
+                    return (
+                      <Card
+                        key={s.destinationId}
+                        className={`p-4 text-center cursor-pointer transition-all duration-200 relative hover:shadow-lg ${
+                          isSelected
+                            ? "bg-blue-50 border-blue-500 border-2 shadow-lg" 
+                            : "hover:bg-gray-50 border-gray-200"
+                        }`}
+                        onClick={() => {
+                          setSelected(s);
+                          // Clear queue and selected vehicle when switching routes
+                          setQueue([]);
+                          setSelectedVehicleForBooking(null);
+                          setSelectedSeats([]);
+                          saveSelectedVehicle(null);
+                          setLoading(false); // Ensure loading state is cleared
+                        }}
+                      >
+                        {/* Ghost booking count badge */}
+                        {ghostBookingCounts[s.destinationId] > 0 && (
+                          <div className="absolute -top-2 -right-2 bg-purple-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                            {ghostBookingCounts[s.destinationId]}
+                          </div>
+                        )}
+                        <h3 className="text-lg font-semibold text-gray-800">{s.destinationName}</h3>
+                        <div className="mt-3">
+                          {s.totalVehicles > 0 ? (
+                            <>
+                              <p className="text-2xl font-bold text-blue-600">{s.availableSeats}</p>
+                              <span className="text-sm text-gray-500">sièges disponibles</span>
+                              <div className="text-xs text-gray-400 mt-1">
+                                {s.totalVehicles} véhicule{s.totalVehicles > 1 ? 's' : ''} en file
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-4xl mb-2">🚗</div>
+                              <p className="text-lg font-bold text-gray-400">Vide</p>
+                              <span className="text-sm text-gray-500">Aucun véhicule</span>
+                              <div className="text-xs text-gray-400 mt-1">
+                                Cliquez pour ajouter
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </Card>
+                    );
+                  })
                 )}
               </div>
             </div>
-            
-            <div className="flex h-full gap-4 items-end">
-              {/* Left: Seat buttons at bottom */}
-              <div className="flex-1 flex flex-col h-full">
-                <div className="mt-auto">
-                  <div className="grid grid-cols-4 gap-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((seatCount) => {
-                      const availableSeatsForBooking = selectedVehicleForBooking ? selectedVehicleForBooking.availableSeats : (selected?.availableSeats ?? 0);
-                      const isDisabled = seatCount > availableSeatsForBooking;
-                      const isSelected = selectedSeats.length === seatCount;
+          </div>
 
-                      return (
-                        <button
-                          key={seatCount}
-                          onClick={() => handleSeatCountSelect(seatCount)}
-                          disabled={isDisabled}
-                          className={`w-20 h-20 rounded-xl border-3 transition-all duration-300 transform hover:scale-105 ${
-                            isSelected
-                              ? 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-700 text-white shadow-lg scale-105 ring-2 ring-blue-300'
-                              : isDisabled
-                              ? 'bg-gradient-to-br from-gray-200 to-gray-300 border-gray-400 text-gray-500 cursor-not-allowed opacity-50'
-                              : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300 text-gray-700 hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-blue-100'
-                          }`}
-                        >
-                          <div className="text-xl font-bold">{seatCount}</div>
-                          <div className="text-xs opacity-75">
-                            {seatCount === 1 ? 'Siège' : 'Sièges'}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    Sièges disponibles&nbsp;: {selectedVehicleForBooking ? selectedVehicleForBooking.availableSeats : (selected?.availableSeats ?? 0)}
+          {/* Global Actions */}
+          <div className="border-t border-gray-200 bg-white p-4">
+            <div className="flex justify-end space-x-4">
+              <Button
+                className="bg-gray-700 hover:bg-gray-800 text-white"
+                onClick={async () => {
+                  setShowTrips(true);
+                  setLoadingTrips(true);
+                  try {
+                    setTripsError(null);
+                    console.log('Loading today\'s trips...');
+                    const r = await listTodayTrips();
+                    console.log('Trips API response:', r);
+                    setTrips(Array.isArray(r.data) ? r.data : []);
+                    console.log('Trips loaded:', Array.isArray(r.data) ? r.data.length : 0, 'trips');
+                  } catch (error) {
+                    console.error('Failed to load trips:', error);
+                    setTripsError('Échec du chargement des trajets. Veuillez réessayer.');
+                    setTrips([]);
+                  } finally {
+                    setLoadingTrips(false);
+                  }
+                }}
+              >
+                Voir les trajets d'aujourd'hui
+              </Button>
+              
+              {/* Vehicle Trips Count Button */}
+              <Button
+                onClick={() => setShowVehicleTripsModal(true)}
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-6 py-2 rounded-xl shadow-lg"
+              >
+                🚗 Nombre de trajets
+              </Button>
+              
+              {/* Ghost Mode Button */}
+              {!isGhostMode ? (
+                <Button
+                  onClick={handleEnterGhostMode}
+                  className="bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-6 py-2 rounded-xl shadow-lg"
+                >
+                  Mode Fantôme
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleExitGhostMode}
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-6 py-2 rounded-xl shadow-lg"
+                >
+                  Sortir du Mode Fantôme
+                </Button>
+              )}
+            </div>
+          </div>
+          {/* Booking Section - Fixed at bottom of right panel */}
+          {(selected || (isGhostMode && selectedGhostDestination)) && (
+            <div className={`border-t ${isGhostMode ? 'border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50' : 'border-gray-200 bg-white'}`}>
+              <div className="px-6 py-6">
+                {/* Booking Section Header */}
+                <div className="mb-6 text-center">
+                  <h3 className={`text-xl font-semibold mb-2 ${isGhostMode ? 'text-purple-800' : 'text-gray-800'}`}>
+                    {isGhostMode ? (
+                      <>Réservation Fantôme pour {selectedGhostDestination?.destinationName}</>
+                    ) : (
+                      <>Réservation pour {selected?.destinationName}</>
+                    )}
+                  </h3>
+                  <div className={`text-sm ${isGhostMode ? 'text-purple-600' : 'text-gray-600'}`}>
+                    {isGhostMode ? (
+                      <>Mode fantôme activé - <span className="font-medium text-purple-600">réservation sans véhicule</span></>
+                    ) : selectedVehicleForBooking ? (
+                      <>Véhicule sélectionné: <span className="font-medium text-blue-600">{selectedVehicleForBooking.licensePlate}</span></>
+                    ) : (
+                      <>Aucun véhicule sélectionné - <span className="font-medium text-green-600">attribution automatique</span></>
+                    )}
                   </div>
                 </div>
-              </div>
+                
+                <div className="flex gap-8 items-end">
+                  {/* Left: Seat Selection */}
+                  <div className="flex-1">
+                    <div className="text-center mb-4">
+                      <h4 className={`text-lg font-medium mb-3 ${isGhostMode ? 'text-purple-700' : 'text-gray-700'}`}>Nombre de sièges</h4>
+                      <div className="grid grid-cols-4 gap-3 max-w-md mx-auto">
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((seatCount) => {
+                          const availableSeatsForBooking = isGhostMode ? 8 : (selectedVehicleForBooking ? selectedVehicleForBooking.availableSeats : (selected?.availableSeats ?? 0));
+                          const isDisabled = !isGhostMode && seatCount > availableSeatsForBooking;
+                          const isSelected = selectedSeats.length === seatCount;
 
-              {/* Right: Total text above Book button, bottom-pinned */}
-              <div className="w-64 pl-1 flex flex-col items-stretch h-full">
-                <div className="mt-auto flex flex-col gap-3">
-                  {selectedVehicleForBooking && (
-                    <Button
-                      onClick={async () => {
-                        if (!selectedVehicleForBooking) return;
-                        setBookingLoading(true);
-                        try {
-                          await cancelOneBookingByQueueEntry({ queueEntryId: selectedVehicleForBooking.id });
-                          addNotification({
-                            type: 'success',
-                            title: '1 siège annulé',
-                            message: `Vehicule : ${selectedVehicleForBooking.licensePlate}`,
-                          });
-                          // Refresh queue and summaries
-                          setLoading(true);
-                          try {
-                            const response = await listQueue(selected!.destinationId);
-                            const items = (response.data as any[]).map((e) => ({
-                              ...e,
-                              availableSeats: Number(e.availableSeats ?? 0),
-                              totalSeats: Number(e.totalSeats ?? 0),
-                              queuePosition: Number(e.queuePosition ?? 0),
-                              bookedSeats: Number(e.bookedSeats ?? 0),
-                            })) as QueueEntry[];
-                            setQueue(items);
-                            const summariesResponse = await listQueueSummaries();
-                            setSummaries(summariesResponse.data || []);
-                          } finally {
-                            setLoading(false);
-                          }
-                        } catch (error) {
-                          const message = (error as any)?.message || "Échec de l'annulation du siège.";
-                          addNotification({ type: 'error', title: "Échec de l'annulation", message });
-                        } finally {
-                          setBookingLoading(false);
-                        }
-                      }}
-                      disabled={bookingLoading}
-                      className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 text-sm font-semibold w-full rounded-xl shadow disabled:opacity-50"
-                    >
-                      Cancel 1 seat
-                    </Button>
-                  )}
-                  <div className="text-lg font-semibold">
-                    Total: {(selectedSeats.length * ((selected.basePrice || 0) + 0.15)).toFixed(2)}TND
+                          return (
+                            <button
+                              key={seatCount}
+                              onClick={() => handleSeatCountSelect(seatCount)}
+                              disabled={isDisabled}
+                              className={`w-16 h-16 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 ${
+                                isSelected
+                                  ? isGhostMode 
+                                    ? 'bg-gradient-to-br from-purple-500 to-purple-600 border-purple-700 text-white shadow-lg scale-105 ring-2 ring-purple-300'
+                                    : 'bg-gradient-to-br from-blue-500 to-blue-600 border-blue-700 text-white shadow-lg scale-105 ring-2 ring-blue-300'
+                                  : isDisabled
+                                  ? 'bg-gradient-to-br from-gray-200 to-gray-300 border-gray-400 text-gray-500 cursor-not-allowed opacity-50'
+                                  : isGhostMode
+                                  ? 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300 text-purple-700 hover:border-purple-400 hover:bg-gradient-to-br hover:from-purple-100 hover:to-purple-200'
+                                  : 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300 text-gray-700 hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-blue-100'
+                              }`}
+                            >
+                              <div className="text-lg font-bold">{seatCount}</div>
+                              <div className="text-xs opacity-75">
+                                {seatCount === 1 ? 'Siège' : 'Sièges'}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className={`text-sm mt-3 ${isGhostMode ? 'text-purple-500' : 'text-gray-500'}`}>
+                        {isGhostMode ? (
+                          <>Mode fantôme - <span className="font-medium">tous les sièges disponibles</span></>
+                        ) : (
+                          <>Sièges disponibles: {selectedVehicleForBooking ? selectedVehicleForBooking.availableSeats : (selected?.availableSeats ?? 0)}</>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <Button
-                    onClick={handleConfirmBooking}
-                    disabled={bookingLoading || selectedSeats.length === 0}
-                    className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-6 py-4 text-base font-bold w-full rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {bookingLoading ? 'Traitement…' : `Réserver ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}${selectedVehicleForBooking ? ` (${selectedVehicleForBooking.licensePlate})` : ' (auto-assigné)'}`}
-                  </Button>
+
+                  {/* Right: Booking Actions */}
+                  <div className="w-80">
+                    <div className="space-y-4">
+                      {!isGhostMode && selectedVehicleForBooking && (
+                        <Button
+                          onClick={async () => {
+                            if (!selectedVehicleForBooking) return;
+                            setBookingLoading(true);
+                            try {
+                              await cancelOneBookingByQueueEntry({ queueEntryId: selectedVehicleForBooking.id });
+                              addNotification({
+                                type: 'success',
+                                title: '1 siège annulé',
+                                message: `Vehicule : ${selectedVehicleForBooking.licensePlate}`,
+                              });
+                              // Refresh queue and summaries
+                              setLoading(true);
+                              try {
+                                const response = await listQueue(selected!.destinationId);
+                                const items = (response.data as any[]).map((e) => ({
+                                  ...e,
+                                  availableSeats: Number(e.availableSeats ?? 0),
+                                  totalSeats: Number(e.totalSeats ?? 0),
+                                  queuePosition: Number(e.queuePosition ?? 0),
+                                  bookedSeats: Number(e.bookedSeats ?? 0),
+                                })) as QueueEntry[];
+                                setQueue(items);
+                                const summariesResponse = await listQueueSummaries();
+                                setSummaries(summariesResponse.data || []);
+                              } finally {
+                                setLoading(false);
+                              }
+                            } catch (error) {
+                              const message = (error as any)?.message || "Échec de l'annulation du siège.";
+                              addNotification({ type: 'error', title: "Échec de l'annulation", message });
+                            } finally {
+                              setBookingLoading(false);
+                            }
+                          }}
+                          disabled={bookingLoading}
+                          className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 text-sm font-semibold w-full rounded-xl shadow disabled:opacity-50"
+                        >
+                          Annuler 1 siège
+                        </Button>
+                      )}
+                      
+                      <div className="text-center">
+                        <div className={`text-2xl font-bold mb-2 ${isGhostMode ? 'text-purple-800' : 'text-gray-800'}`}>
+                          Total: {(selectedSeats.length * ((isGhostMode ? selectedGhostDestination?.basePrice : selected?.basePrice) || 0) + (selectedSeats.length * 0.15)).toFixed(2)} TND
+                        </div>
+                        <Button
+                          onClick={isGhostMode ? handleGhostBooking : handleConfirmBooking}
+                          disabled={bookingLoading || selectedSeats.length === 0}
+                          className={isGhostMode 
+                            ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white px-8 py-4 text-lg font-bold w-full rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            : "bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-8 py-4 text-lg font-bold w-full rounded-xl shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                          }
+                        >
+                          {bookingLoading ? (
+                            <span className="flex items-center justify-center">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                              {isGhostMode ? 'Création...' : 'Traitement…'}
+                            </span>
+                          ) : isGhostMode ? (
+                            `Créer Réservation Fantôme (${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'})`
+                          ) : (
+                            `Réserver ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}${selectedVehicleForBooking ? ` (${selectedVehicleForBooking.licensePlate})` : ' (auto-assigné)'}`
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-                </div>
-              )}
+          )}
+        </div>
+      </div>
 
       {/* Transfer Seats Modal */}
       <TransferSeatsModal
@@ -2662,6 +3192,21 @@ export default function MainPage() {
         queue={queue}
         searchError={searchError}
         currentRoute={selected}
+      />
+
+      {/* Vehicle Trips Count Modal */}
+      <VehicleTripsCountModal
+        isOpen={showVehicleTripsModal}
+        onClose={handleCloseVehicleTripsModal}
+        query={vehicleTripsQuery}
+        onQueryChange={handleVehicleTripsInputChange}
+        count={vehicleTripsCount}
+        loading={vehicleTripsLoading}
+        error={vehicleTripsError}
+        onSearch={handleGetVehicleTripsCount}
+        suggestions={vehicleTripsSuggestions}
+        suggestionsLoading={vehicleTripsSuggestionsLoading}
+        onSelectVehicle={handleSelectVehicleForTrips}
       />
 
       {/* Notifications */}
@@ -2775,7 +3320,7 @@ export default function MainPage() {
                             className="px-3 py-1 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Imprimer le laissez-passer pour ce Vehicule"
                           >
-                            🚪 Imprimer laissez-passer
+                            Imprimer laissez-passer
                           </button>
                         </div>
                       </div>
@@ -2790,5 +3335,6 @@ export default function MainPage() {
     </div>
   );
 }
+
 
 

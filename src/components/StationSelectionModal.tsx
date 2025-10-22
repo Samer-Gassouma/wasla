@@ -15,25 +15,25 @@ export const AVAILABLE_STATIONS: Station[] = [
     id: 'jammel',
     name: 'JAMMEL',
     description: 'Station de Jammel uniquement',
-    destinations: ['JAMMEL']
+    destinations: ['JEMMAL']
   },
   {
     id: 'moknin-tboulba',
     name: 'MOKNIN + TBOULBA',
     description: 'Stations de Moknin et Tboulba',
-    destinations: ['MOKNIN', 'TBOULBA']
+    destinations: ['MOKNIN', 'TEBOULBA']
   },
   {
     id: 'kasra-hlele',
     name: 'KASRA HLELE',
     description: 'Station de Kasra Hlele uniquement',
-    destinations: ['KASRA HLELE']
+    destinations: ['KSAR HLEL']
   },
   {
     id: 'all',
     name: 'TOUTES LES STATIONS',
     description: 'Voir toutes les stations disponibles',
-    destinations: ['JAMMEL', 'MOKNIN', 'TBOULBA', 'KASRA HLELE']
+    destinations: ['JEMMAL', 'MOKNIN', 'TEBOULBA', 'KSAR HLEL']
   }
 ];
 

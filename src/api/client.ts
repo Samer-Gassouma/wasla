@@ -227,6 +227,10 @@ export async function listTodayTrips(search?: string) {
   return request<{ data: Array<{ id: string; licensePlate: string; destinationName: string; startTime: string }> }>(API.booking, `/api/v1/trips/today${qs}`);
 }
 
+export async function getTodayTripsCountByLicensePlate(licensePlate: string) {
+  return request<{ data: { count: number } }>(API.booking, `/api/v1/trips/count-by-license?license_plate=${encodeURIComponent(licensePlate)}`);
+}
+
 export async function healthAuth() {
   return fetch(`${API.auth}/health`).then((r) => ({ ok: r.ok }));
 }
