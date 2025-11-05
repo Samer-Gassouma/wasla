@@ -84,14 +84,13 @@ export default function PrinterIpConfigModal({ isOpen, onClose, onConfigUpdate }
   };
 
   const handleResetToDefault = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir réinitialiser la configuration de l\'imprimante ?')) {
-      printerIpConfigService.resetToDefault();
-      const defaultConfig = printerIpConfigService.getConfig();
-      setConfig(defaultConfig);
-      setIsEditing(false);
-      setConnectionStatus(null);
-      setErrors({});
-    }
+    // Remove blocking confirm - just reset directly
+    printerIpConfigService.resetToDefault();
+    const defaultConfig = printerIpConfigService.getConfig();
+    setConfig(defaultConfig);
+    setIsEditing(false);
+    setConnectionStatus(null);
+    setErrors({});
   };
 
   if (!isOpen) return null;

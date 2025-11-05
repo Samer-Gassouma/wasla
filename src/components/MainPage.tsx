@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { listQueue, listQueueSummaries, getStaffInfo, reorderQueue, deleteQueueEntry, changeDestination, transferSeats, getVehicleAuthorizedRoutes, searchVehicles, addVehicleToQueue, getVehicleDayPass, createBookingByQueueEntry, createBookingByDestination, cancelOneBookingByQueueEntry, listTodayTrips, printExitPassAndRemove, createGhostBooking, getGhostBookingCount, getAllDestinations, getTodayTripsCountByLicensePlate } from "@/api/client";
 import { connectQueue } from "@/ws/client";
 import { printerService, TicketData } from "@/services/printerService";
@@ -267,7 +268,7 @@ function TransferSeatsModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Nombre de sièges à transférer&nbsp;:
             </label>
-            <input
+            <Input
               type="number"
               min="1"
               // Limit to booked seats of the source vehicle
@@ -279,7 +280,6 @@ function TransferSeatsModal({
                 const clamped = Math.max(1, Math.min(raw, max));
                 onSeatsCountChange(clamped);
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -288,12 +288,11 @@ function TransferSeatsModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Rechercher un Vehicule destinataire&nbsp;:
             </label>
-            <input
+            <Input
               type="text"
               placeholder="Rechercher par immatriculation..."
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -1140,19 +1139,8 @@ export default function MainPage() {
     }
   };
   
-  // Notification state
-  const [notifications, setNotifications] = useState<Array<{
-    id: string;
-    type: 'success' | 'error';
-    title: string;
-    message: string;
-    bookings?: Array<{
-      id: string;
-      licensePlate: string;
-      totalAmount: number;
-      createdBy: string;
-    }>;
-  }>>([]);
+  // Notification state (same as management-desktop)
+  const [notification, setNotification] = useState<{message: string; type: 'success' | 'error'} | null>(null)
 
   // Centralized refresh function for queue and destination lists
   const refreshQueueAndSummaries = async (destinationId?: string) => {
@@ -1187,11 +1175,7 @@ export default function MainPage() {
               console.log('Fully booked vehicle removed from queue successfully:', vehicle.licensePlate);
               
               // Add notification for vehicle removal
-              addNotification({
-                type: 'success',
-                title: 'Vehicule(s) retiré(s) de la file',
-                message: `Le Vehicule ${vehicle.licensePlate} a été retiré de la file car il est maintenant complet.`,
-              });
+              showNotification(`Le Vehicule ${vehicle.licensePlate} a été retiré de la file car il est maintenant complet.`, 'success');
             } catch (removeError) {
               console.error('Failed to remove fully booked vehicle from queue:', removeError);
             }
@@ -1284,20 +1268,11 @@ export default function MainPage() {
   
   const staffInfo = getStaffInfoLocal();
 
-  // Notification helpers
-  const addNotification = (notification: Omit<typeof notifications[0], 'id'>) => {
-    const id = Date.now().toString();
-    setNotifications(prev => [...prev, { ...notification, id }]);
-    
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-      setNotifications(prev => prev.filter(n => n.id !== id));
-    }, 10000);
-  };
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
-  };
+  // Notification helper (same as management-desktop)
+  const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    setNotification({ message, type })
+    setTimeout(() => setNotification(null), 3000)
+  }
 
   // Keyboard shortcuts: F6 (open add vehicle), ESC (close add vehicle),
   // AZERTY letters to select destinations, Numpad 1-9 to set seat count, Space to confirm booking
@@ -1487,24 +1462,16 @@ export default function MainPage() {
     
     if (hasBookedSeats) {
       // Find the next vehicle in line
-      const nextVehicle = queue.find(item => item.queuePosition === entry.queuePosition + 1);
-      
-      if (nextVehicle) {
-        const confirmMessage = `This vehicle has ${bookedSeats} booked seats.\n\nSeats will be transferred to the next vehicle in line: ${nextVehicle.licensePlate}\n\nAre you sure you want to remove this vehicle from the queue?`;
-        if (!confirm(confirmMessage)) {
-          return;
-        }
-      } else {
-  const confirmMessage = `Ce Vehicule a ${bookedSeats} sièges réservés.\n\nIl n'y a pas de Vehicule suivant dans la file pour transférer les sièges.\n\nÊtes-vous sûr de vouloir retirer ce Vehicule de la file ?`;
-        if (!confirm(confirmMessage)) {
-          return;
-        }
-      }
+    const nextVehicle = queue.find(item => item.queuePosition === entry.queuePosition + 1);
+    
+    if (nextVehicle) {
+      // Show notification about seat transfer instead of blocking confirm
+      showNotification(`Ce véhicule a ${bookedSeats} sièges réservés. Les sièges seront transférés au véhicule suivant: ${nextVehicle.licensePlate}`, 'success');
     } else {
-      if (!confirm('Êtes-vous sûr de vouloir retirer ce Vehicule de la file ?')) {
-        return;
-      }
+      // Show notification about no next vehicle instead of blocking confirm
+      showNotification(`Ce véhicule a ${bookedSeats} sièges réservés. Il n'y a pas de véhicule suivant dans la file pour transférer les sièges.`, 'error');
     }
+  }
     
     try {
       await deleteQueueEntry(selected.destinationId, entryId);
@@ -1535,17 +1502,9 @@ export default function MainPage() {
       
       // Check if queue is now empty and show appropriate notification
       if (updatedQueue.length === 0) {
-        addNotification({
-          type: 'success',
-          title: 'Véhicule retiré',
-          message: `Le véhicule ${entry.licensePlate} a été retiré. La file ${selected.destinationName} est maintenant vide.`
-        });
+        showNotification(`Le véhicule ${entry.licensePlate} a été retiré. La file ${selected.destinationName} est maintenant vide.`, 'success');
       } else {
-        addNotification({
-          type: 'success',
-          title: 'Véhicule retiré',
-          message: `Le véhicule ${entry.licensePlate} a été retiré de la file ${selected.destinationName}.`
-        });
+        showNotification(`Le véhicule ${entry.licensePlate} a été retiré de la file ${selected.destinationName}.`, 'success');
       }
       
       // Then refresh summaries in the background
@@ -1554,7 +1513,7 @@ export default function MainPage() {
       console.log('Successfully removed from queue:', entryId);
     } catch (error) {
       console.error('Échec du retrait de la file :', error);
-      alert('Échec du retrait du Vehicule de la file. Veuillez réessayer.');
+      showNotification('Échec du retrait du Vehicule de la file. Veuillez réessayer.', 'error');
     }
   };
 
@@ -1625,24 +1584,16 @@ export default function MainPage() {
       
       // Check if queue is now empty after removal
       if (updatedQueue.length === 0) {
-        addNotification({ 
-          type: 'success', 
-          title: 'Autorisation sortie', 
-          message: `Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré. La file ${selected.destinationName} est maintenant vide.` 
-        });
+        showNotification(`Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré. La file ${selected.destinationName} est maintenant vide.`, 'success');
       } else {
-        addNotification({ 
-          type: 'success', 
-          title: 'Autorisation sortie', 
-          message: `Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré de la file.` 
-        });
+        showNotification(`Imprimé. Total ${total.toFixed(2)} TND. Véhicule retiré de la file.`, 'success');
       }
       
       // Then refresh summaries in the background
       await refreshQueueAndSummaries();
     } catch (e) {
       console.error(e);
-      alert("Échec de l'impression d'autorisation de sortie.");
+      showNotification("Échec de l'impression d'autorisation de sortie.", 'error');
     }
   };
 
@@ -1653,7 +1604,7 @@ export default function MainPage() {
       // Validate requested seats do not exceed booked seats of source vehicle
       const maxTransferable = transferFromEntry.bookedSeats ?? 0;
       if (transferSeatsCount < 1 || transferSeatsCount > maxTransferable) {
-        alert(`Vous ne pouvez transférer que jusqu'à ${maxTransferable} sièges réservés.`);
+        showNotification(`Vous ne pouvez transférer que jusqu'à ${maxTransferable} sièges réservés.`, 'error');
         return;
       }
       console.log('Transfer seats request:', {
@@ -1674,10 +1625,11 @@ export default function MainPage() {
       setTransferModalOpen(false);
       setTransferFromEntry(null);
       
+      showNotification(`Transfert réussi: ${transferSeatsCount} sièges de ${transferFromEntry.licensePlate} vers ${toEntry.licensePlate}`, 'success');
       console.log(`Successfully transferred ${transferSeatsCount} seats from ${transferFromEntry.licensePlate} to ${toEntry.licensePlate}`);
     } catch (error) {
       console.error('Failed to transfer seats:', error);
-  alert('Échec du transfert des sièges. Veuillez réessayer.');
+      showNotification('Échec du transfert des sièges. Veuillez réessayer.', 'error');
     }
   };
 
@@ -1699,7 +1651,7 @@ export default function MainPage() {
       setAuthorizedStations(response.data);
     } catch (error) {
       console.error('Failed to load authorized stations:', error);
-      alert('Failed to load authorized stations. Please try again.');
+      showNotification('Échec du chargement des stations autorisées. Veuillez réessayer.', 'error');
     } finally {
       setLoadingStations(false);
     }
@@ -1711,22 +1663,21 @@ export default function MainPage() {
       const response = await getVehicleDayPass(vehicleId);
       
       if (!response.data) {
-        addNotification({
-          type: 'error',
-          title: 'No Day Pass Found',
-      message: "Ce Vehicule n'a pas de pass journalier valide à réimprimer."
-        });
+        showNotification("Ce Vehicule n'a pas de pass journalier valide à réimprimer.", 'error');
         return;
       }
       
       const dayPassData = response.data;
+      
+      // Day pass price is always 2.0 TND regardless of route price
+      const dayPassPrice = 2.0;
       
       // Convert day pass data to ticket format
       const ticketData = {
         licensePlate: dayPassData.licensePlate,
         destinationName: dayPassData.destinationName,
         seatNumber: 1, // Day pass doesn't have specific seat
-        totalAmount: dayPassData.price,
+        totalAmount: dayPassPrice,
         createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
         createdAt: new Date().toISOString(), // Use current time for reprint
         stationName: "Station", // Default station name
@@ -1736,22 +1687,14 @@ export default function MainPage() {
        // Print the day pass ticket
        await printerService.printDayPassTicket(ticketData);
       
-      addNotification({
-        type: 'success',
-      title: 'Pass journalier réimprimé',
-      message: `Ticket de pass journalier réimprimé pour ${dayPassData.licensePlate}`
-      });
+      showNotification(`Ticket de pass journalier réimprimé pour ${dayPassData.licensePlate}`, 'success');
       
       // Refresh queue and summaries after reprinting day pass
       await refreshQueueAndSummaries();
       
     } catch (error) {
       console.error('Failed to reprint day pass:', error);
-      addNotification({
-        type: 'error',
-      title: 'Échec de la réimpression',
-      message: `Échec de la réimpression du pass journalier : ${error}`
-      });
+      showNotification(`Échec de la réimpression du pass journalier : ${error}`, 'error');
     }
   };
 
@@ -1781,19 +1724,11 @@ export default function MainPage() {
        // Print the exit pass ticket
        await printerService.printExitPassTicket(exitPassTicketData);
       
-      addNotification({
-        type: 'success',
-        title: 'Laissez-passer imprimé',
-        message: `Laissez-passer imprimé pour ${trip.licensePlate} (${trip.destinationName})`
-      });
+      showNotification(`Laissez-passer imprimé pour ${trip.licensePlate} (${trip.destinationName})`, 'success');
       
     } catch (error) {
       console.error('Failed to print exit pass for trip:', error);
-      addNotification({
-        type: 'error',
-        title: "Échec de l'impression",
-        message: `Échec de l'impression du laissez-passer de sortie : ${error}`
-      });
+      showNotification(`Échec de l'impression du laissez-passer de sortie : ${error}`, 'error');
     }
   };
 
@@ -1810,10 +1745,11 @@ export default function MainPage() {
       setChangeDestModalOpen(false);
       setChangeDestFromEntry(null);
       
+      showNotification(`${changeDestFromEntry.licensePlate} déplacé vers ${station.stationName}`, 'success');
       console.log(`Successfully moved ${changeDestFromEntry.licensePlate} to ${station.stationName}`);
     } catch (error) {
       console.error('Failed to change destination:', error);
-  alert('Échec du changement de destination. Veuillez réessayer.');
+      showNotification('Échec du changement de destination. Veuillez réessayer.', 'error');
     }
   };
 
@@ -1907,11 +1843,13 @@ export default function MainPage() {
       if (response.data?.dayPassStatus === "created" && response.data?.dayPass) {
         // New day pass was created
         const dayPassData = response.data.dayPass;
+        // Day pass price is always 2.0 TND regardless of route price
+        const dayPassPrice = 2.0;
         const ticketData = {
           licensePlate: dayPassData.licensePlate,
           destinationName: dayPassData.destinationName,
           seatNumber: 1, // Day pass doesn't have specific seat
-          totalAmount: dayPassData.price,
+          totalAmount: dayPassPrice,
           createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
           createdAt: dayPassData.purchaseDate,
           stationName: "Station", // Default station name
@@ -1921,34 +1859,18 @@ export default function MainPage() {
          // Print the day pass ticket automatically
          try {
            await printerService.printDayPassTicket(ticketData);
-          addNotification({
-            type: 'success',
-            title: 'Pass journalier créé et imprimé',
-            message: `Nouveau pass journalier créé et imprimé pour ${dayPassData.licensePlate}`
-          });
+          showNotification(`Nouveau pass journalier créé et imprimé pour ${dayPassData.licensePlate}`, 'success');
         } catch (printError) {
           console.error('Échec de l\'impression du pass journalier :', printError);
-          addNotification({
-            type: 'error',
-            title: 'Pass journalier créé, impression échouée',
-            message: `Le pass journalier a été créé mais l\'impression a échoué : ${printError}`
-          });
+          showNotification(`Le pass journalier a été créé mais l\'impression a échoué : ${printError}`, 'error');
         }
       } else if (response.data?.dayPassStatus === "valid" && response.data?.dayPassValid) {
         // Vehicle already has a valid day pass
         const dayPassData = response.data.dayPassValid;
-        addNotification({
-          type: 'success',
-          title: 'Vehicule ajouté à la file',
-          message: `${dayPassData.licensePlate} ajouté à la file (possède déjà un pass valide)`
-        });
+        showNotification(`${dayPassData.licensePlate} ajouté à la file (possède déjà un pass valide)`, 'success');
       } else {
         // No day pass involved
-        addNotification({
-          type: 'success',
-          title: 'Vehicule ajouté à la file',
-          message: `${selectedVehicle.licensePlate} ajouté à la file de ${station.stationName}`
-        });
+        showNotification(`${selectedVehicle.licensePlate} ajouté à la file de ${station.stationName}`, 'success');
       }
       
       // Automatically refresh queue and summaries for the destination where vehicle was added
@@ -1964,7 +1886,7 @@ export default function MainPage() {
       console.log(`Successfully added ${selectedVehicle.licensePlate} to ${station.stationName} queue`);
     } catch (error) {
       console.error('Échec de l\'ajout du Vehicule à la file :', error);
-      alert('Échec de l\'ajout du Vehicule à la file. Veuillez réessayer.');
+      showNotification('Échec de l\'ajout du Vehicule à la file. Veuillez réessayer.', 'error');
     } finally {
       setLoadingVehicleStations(false);
     }
@@ -2083,24 +2005,12 @@ export default function MainPage() {
         }
         
         // Update notification message to include vehicle removal info
-        let notificationMessage = `Vehicule : ${vehicleLP} - ${bookedSeatsCount} ticket${bookedSeatsCount === 1 ? '' : 's'} imprimé`;
+        let notificationMessage = `Réservation réussie: ${vehicleLP} - ${bookedSeatsCount} ticket${bookedSeatsCount === 1 ? '' : 's'} imprimé`;
         if (hasExitPass) {
           notificationMessage += ' + Laissez-passer imprimé + Vehicule retiré de la file';
         }
         
-        addNotification({
-          type: 'success',
-          title: `Réservation réussie de ${bookedSeatsCount} siège${bookedSeatsCount === 1 ? '' : 's'}`,
-          message: notificationMessage,
-          bookings: bookings.length > 0
-            ? bookings.map((b: any) => ({
-                id: b.id,
-                licensePlate: b.licensePlate,
-                totalAmount: b.totalAmount,
-                createdBy: b.createdBy
-              }))
-            : undefined
-        });
+        showNotification(notificationMessage, 'success');
       } else {
         // Booking by destination only (no specific vehicle selected)
         console.log('Creating booking by destination:', selected.destinationId, 'seats:', selectedSeats.length);
@@ -2142,11 +2052,7 @@ export default function MainPage() {
           }
         }
         
-        addNotification({
-          type: 'success',
-          title: `Réservation réussie de ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}`,
-          message: `Vehicule : ${b?.licensePlate || 'Attribué automatiquement'} - ${selectedSeats.length} ticket${selectedSeats.length === 1 ? '' : 's'} imprimé`,
-        });
+        showNotification(`Réservation réussie: ${b?.licensePlate || 'Attribué automatiquement'} - ${selectedSeats.length} ticket${selectedSeats.length === 1 ? '' : 's'} imprimé`, 'success');
       }
       
       // Automatically refresh queue and summaries after booking completion
@@ -2159,11 +2065,7 @@ export default function MainPage() {
     } catch (error) {
       console.error('Échec de la création de la réservation :', error);
       const message = (error as any)?.message || 'Échec de la création de la réservation. Veuillez réessayer.';
-      addNotification({
-        type: 'error',
-        title: 'Échec de la réservation',
-        message
-      });
+      showNotification(message, 'error');
     } finally {
       setBookingLoading(false);
     }
@@ -2249,11 +2151,7 @@ export default function MainPage() {
         }
       }
       
-      addNotification({
-        type: 'success',
-        title: `Réservation fantôme réussie de ${selectedSeats.length} siège${selectedSeats.length === 1 ? '' : 's'}`,
-        message: `Ticket fantôme #${ghostBooking?.seatNumber || 1} imprimé pour ${selectedGhostDestination.destinationName}`,
-      });
+      showNotification(`Réservation fantôme réussie: Ticket #${ghostBooking?.seatNumber || 1} imprimé pour ${selectedGhostDestination.destinationName}`, 'success');
       
       // Refresh ghost booking counts
       await loadGhostBookingCounts();
@@ -2265,11 +2163,7 @@ export default function MainPage() {
     } catch (error) {
       console.error('Échec de la création de la réservation fantôme :', error);
       const message = (error as any)?.message || 'Échec de la création de la réservation fantôme. Veuillez réessayer.';
-      addNotification({
-        type: 'error',
-        title: 'Échec de la réservation fantôme',
-        message
-      });
+      showNotification(message, 'error');
     } finally {
       setBookingLoading(false);
     }
@@ -2289,19 +2183,11 @@ export default function MainPage() {
       const response = await getTodayTripsCountByLicensePlate(vehicleTripsQuery.trim());
       setVehicleTripsCount(response.data.count);
       
-      addNotification({
-        type: 'success',
-        title: 'Nombre de trajets trouvé',
-        message: `Le véhicule ${vehicleTripsQuery.trim()} a effectué ${response.data.count} trajet${response.data.count > 1 ? 's' : ''} aujourd'hui`
-      });
+      showNotification(`Le véhicule ${vehicleTripsQuery.trim()} a effectué ${response.data.count} trajet${response.data.count > 1 ? 's' : ''} aujourd'hui`, 'success');
     } catch (error) {
       console.error('Failed to get vehicle trips count:', error);
       setVehicleTripsError('Échec de la recherche. Vérifiez l\'immatriculation.');
-      addNotification({
-        type: 'error',
-        title: 'Erreur de recherche',
-        message: 'Impossible de récupérer le nombre de trajets pour cette immatriculation'
-      });
+      showNotification('Impossible de récupérer le nombre de trajets pour cette immatriculation', 'error');
     } finally {
       setVehicleTripsLoading(false);
     }
@@ -2633,11 +2519,13 @@ export default function MainPage() {
             // Automatically print the day pass ticket
             if (msg.data) {
               const dayPassData = msg.data as any;
+              // Day pass price is always 2.0 TND regardless of route price
+              const dayPassPrice = 2.0;
               const ticketData = {
                 licensePlate: dayPassData.licensePlate,
                 destinationName: dayPassData.destinationName,
                 seatNumber: 1, // Day pass doesn't have specific seat
-                totalAmount: dayPassData.price,
+                totalAmount: dayPassPrice,
                 createdBy: staffInfo?.firstName + ' ' + staffInfo?.lastName || 'Agent',
                 createdAt: dayPassData.purchaseDate,
                 stationName: "Station", // Default station name
@@ -2648,19 +2536,11 @@ export default function MainPage() {
               printerService.printDayPassTicket(ticketData)
                 .then(() => {
                   console.log("Day pass ticket printed successfully");
-                  addNotification({
-                    type: 'success',
-                    title: 'Day Pass Printed',
-                    message: `Day pass ticket printed for ${dayPassData.licensePlate}`
-                  });
+                  showNotification(`Day pass ticket printed for ${dayPassData.licensePlate}`, 'success');
                 })
                 .catch((error) => {
                   console.error("Failed to print day pass ticket:", error);
-                  addNotification({
-                    type: 'error',
-                    title: 'Print Failed',
-                    message: `Failed to print day pass ticket for ${dayPassData.licensePlate}: ${error}`
-                  });
+                  showNotification(`Failed to print day pass ticket for ${dayPassData.licensePlate}: ${error}`, 'error');
                 });
             }
           }
@@ -2723,9 +2603,9 @@ export default function MainPage() {
             onClick={async () => {
               try {
                 await refreshQueueAndSummaries();
-                addNotification({ type: 'success', title: 'Actualisé', message: 'Données de la file et destinations mises à jour.' });
+                showNotification('Données de la file et destinations mises à jour.', 'success');
               } catch (e) {
-                addNotification({ type: 'error', title: 'Échec', message: "Échec de l'actualisation." });
+                showNotification("Échec de l'actualisation.", 'error');
               }
             }}
           >
@@ -3077,11 +2957,7 @@ export default function MainPage() {
                             setBookingLoading(true);
                             try {
                               await cancelOneBookingByQueueEntry({ queueEntryId: selectedVehicleForBooking.id });
-                              addNotification({
-                                type: 'success',
-                                title: '1 siège annulé',
-                                message: `Vehicule : ${selectedVehicleForBooking.licensePlate}`,
-                              });
+                              showNotification(`1 siège annulé pour le véhicule ${selectedVehicleForBooking.licensePlate}`, 'success');
                               // Refresh queue and summaries
                               setLoading(true);
                               try {
@@ -3101,7 +2977,7 @@ export default function MainPage() {
                               }
                             } catch (error) {
                               const message = (error as any)?.message || "Échec de l'annulation du siège.";
-                              addNotification({ type: 'error', title: "Échec de l'annulation", message });
+                              showNotification(message, 'error');
                             } finally {
                               setBookingLoading(false);
                             }
@@ -3209,55 +3085,33 @@ export default function MainPage() {
         onSelectVehicle={handleSelectVehicleForTrips}
       />
 
-      {/* Notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
-        {notifications.map((notification) => (
-          <div
-            key={notification.id}
-            className={`max-w-md p-4 rounded-lg shadow-lg border-l-4 transform transition-all duration-300 ${
-              notification.type === 'success'
-                ? 'bg-green-50 border-green-400 text-green-800'
-                : 'bg-red-50 border-red-400 text-red-800'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <div className="flex-1">
-                <div className="font-semibold text-sm">{notification.title}</div>
-                <div className="text-sm mt-1">{notification.message}</div>
-                
-                {/* Booking Details */}
-                {notification.bookings && notification.bookings.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    <div className="text-xs font-medium text-gray-600">Détails de réservation&nbsp;:</div>
-                    {notification.bookings.map((booking, index) => (
-                      <div key={booking.id} className="text-xs bg-white bg-opacity-50 p-2 rounded">
-                        <div className="flex justify-between">
-                          <span>Siège {index + 1} :</span>
-                          <span className="font-medium">{booking.licensePlate}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Montant&nbsp;:</span>
-                          <span className="font-medium">{booking.totalAmount.toFixed(2)}TND</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Agent&nbsp;:</span>
-                          <span className="font-medium">{booking.createdBy}</span>
-                        </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-              <button
-                onClick={() => removeNotification(notification.id)}
-                className="ml-2 text-gray-400 hover:text-gray-600 text-lg"
-              >
-                ×
-              </button>
+      {/* Notification Toast (same as management-desktop) */}
+      {notification && (
+        <div 
+          className={`fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 max-w-md ${
+            notification.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+          }`}
+          style={{ animation: 'slideIn 0.3s ease-out' }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-lg flex-shrink-0">{notification.type === 'success' ? '✅' : '❌'}</span>
+            <span className="font-medium break-words">{notification.message}</span>
           </div>
-          </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
 
       {/* Trips Archive Modal */}
       {showTrips && (
@@ -3269,7 +3123,7 @@ export default function MainPage() {
                 <button onClick={() => setShowTrips(false)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
               </div>
               <div className="mb-4 flex gap-2">
-                <input
+                <Input
                   type="text"
                   placeholder="Rechercher par immatriculation..."
                   value={tripsSearch}
@@ -3292,7 +3146,7 @@ export default function MainPage() {
                       setLoadingTrips(false);
                     }
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1"
                 />
               </div>
               {tripsError && (
