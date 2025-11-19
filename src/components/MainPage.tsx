@@ -1918,7 +1918,7 @@ export default function MainPage() {
         const vehicleLP = bookings[0]?.licensePlate || selectedVehicleForBooking.licensePlate;
         const bookedSeatsCount = bookings.length || selectedSeats.length;
         
-        // Print tickets for each booking (one ticket per seat)
+        // Print talons for each booking (one per seat)
         if (bookings.length > 0) {
           try {
             for (const booking of bookings) {
@@ -1934,7 +1934,6 @@ export default function MainPage() {
                 routeName: selected.destinationName,
               };
               
-              await printerService.printBookingTicket(ticketData);
               // Immediately print a small talon with plate, seat index, date/time
               const talonData: TicketData = {
                 licensePlate: ticketData.licensePlate,
@@ -2021,7 +2020,7 @@ export default function MainPage() {
         });
         const b: any = (response as any).data;
         
-        // Print ticket for auto-assigned booking
+        // Print talon for auto-assigned booking
         if (b) {
           try {
             const ticketData: TicketData = {
@@ -2035,7 +2034,6 @@ export default function MainPage() {
               routeName: selected.destinationName,
             };
             
-            await printerService.printBookingTicket(ticketData);
             const talonData: TicketData = {
               licensePlate: ticketData.licensePlate,
               destinationName: ticketData.destinationName,
@@ -2116,7 +2114,7 @@ export default function MainPage() {
       const response = await createGhostBooking(selectedGhostDestination.destinationId, selectedSeats.length);
       const ghostBooking = (response as any).data;
       
-      // Print ghost ticket
+      // Print ghost talon
       if (ghostBooking) {
         try {
           const ticketData: TicketData = {
@@ -2130,8 +2128,6 @@ export default function MainPage() {
             stationName: 'Station',
             routeName: selectedGhostDestination.destinationName,
           };
-          
-          await printerService.printBookingTicket(ticketData);
           
           // Print talon
           const talonData: TicketData = {

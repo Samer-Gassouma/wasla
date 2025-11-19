@@ -308,8 +308,7 @@ export class PrinterService {
   // Helper method to print ticket after booking
   async printTicketAfterBooking(booking: any, vehicle: any, destination: any, staffName: string, staffFirstName?: string, staffLastName?: string): Promise<void> {
     const ticketData = this.createTicketDataFromBooking(booking, vehicle, destination, staffName, staffFirstName, staffLastName);
-    await this.printBookingTicket(ticketData);
-    // Follow with a talon containing plate, seat index, timestamp
+    // Directly print a talon containing plate, seat index, timestamp
     const talonData: TicketData = {
       licensePlate: ticketData.licensePlate,
       destinationName: ticketData.destinationName,
